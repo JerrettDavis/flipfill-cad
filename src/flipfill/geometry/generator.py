@@ -6,10 +6,11 @@ from enum import StrEnum
 
 import cadquery as cq
 
-from flipfill.geometry.bounds import Bounds3D, bounds_from_shape
+from flipfill.geometry.bounds import Bounds3D, bounds_from_shape, obb_from_vertices
 from flipfill.geometry.importers import GeometryRepository, ResolvedGeometry
 from flipfill.geometry.offsets import OffsetError, offset_shape
 from flipfill.geometry.primitives import make_aabb, make_primitive
+from flipfill.geometry.tessellation import tessellate_shape
 from flipfill.model import (
     ClearanceMode,
     ObjectRole,
@@ -18,6 +19,7 @@ from flipfill.model import (
     Project,
     SceneObject,
     SplitAxis,
+    Transform,
     Vector3,
 )
 
@@ -120,6 +122,25 @@ def _aabb_clearance(resolved: ResolvedGeometry, clearance: float) -> cq.Shape:
     return make_aabb(expanded.size, expanded.center)
 
 
+def _obb_clearance_from_vertices(vertices, clearance: float) -> cq.Shape:
+    obb = obb_from_vertices(vertices).expanded(max(0.0, clearance))
+    return make_primitive(
+        PrimitiveSpec(kind=PrimitiveKind.BOX, size=obb.size),
+        Transform(translation=obb.center, rotation_deg=obb.rotation_deg),
+    )
+
+
+def _obb_clearance(
+    resolved: ResolvedGeometry, clearance: float, tessellation_tolerance: float
+) -> cq.Shape:
+    if resolved.mesh_vertices is not None:
+        vertices = resolved.mesh_vertices
+    else:
+        assert resolved.brep is not None
+        vertices = tessellate_shape(resolved.brep, tessellation_tolerance, 0.1).vertices
+    return _obb_clearance_from_vertices(vertices, clearance)
+
+
 def _subtractive_shape(
     scene_object: SceneObject,
     resolved: ResolvedGeometry,
@@ -127,6 +148,8 @@ def _subtractive_shape(
     messages: list[GenerationMessage],
 ) -> cq.Shape:
     if resolved.brep is None:
+        if scene_object.clearance_mode is ClearanceMode.OBB:
+            return _obb_clearance(resolved, scene_object.clearance_mm, project.tessellation_tolerance)
         if scene_object.clearance_mode is not ClearanceMode.AABB:
             messages.append(
                 GenerationMessage(
@@ -142,6 +165,8 @@ def _subtractive_shape(
         return resolved.brep
     if scene_object.clearance_mode is ClearanceMode.AABB:
         return _aabb_clearance(resolved, scene_object.clearance_mm)
+    if scene_object.clearance_mode is ClearanceMode.OBB:
+        return _obb_clearance(resolved, scene_object.clearance_mm, project.tessellation_tolerance)
 
     try:
         return offset_shape(

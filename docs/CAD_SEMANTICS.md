@@ -54,9 +54,13 @@ OpenCascade constructs an outward 3D offset. This is the closest representation 
 
 ### AABB
 
-The transformed world-axis-aligned bounds are expanded by the clearance amount and subtracted. This sacrifices local fidelity for predictability. It is often the correct early enclosure abstraction for rectangular screens, batteries, board assemblies, speakers, and wiring zones.
+The transformed world-axis-aligned bounds are expanded by the clearance amount and subtracted. This sacrifices local fidelity for predictability. It is often the correct early enclosure abstraction for rectangular screens, batteries, board assemblies, speakers, and wiring zones. A part rotated off the world axes inflates its AABB volume — use OBB instead when that matters.
 
-Future releases will add oriented bounding boxes, convex hulls, swept cable volumes, and face-specific clearance.
+### OBB
+
+An oriented bounding box, fitted with PCA over the resolved geometry's world-space vertices (BRep: tessellated points; mesh: the mesh vertices directly), expanded by the clearance amount and subtracted. This is deterministic and cheap, not a true minimum-volume box (that needs a convex-hull rotating-calipers search), but it stays tight for any part rotated off the world axes while keeping AABB's robustness — it never depends on the source topology being offset-safe. Prefer this over AABB whenever an occupant isn't axis-aligned; prefer AABB when you specifically want the conservative world-aligned service volume (e.g. a wiring keep-out that should be axis-aligned regardless of a connector's rotation).
+
+Future releases will add convex hulls, swept cable volumes, and face-specific clearance.
 
 ## Envelope
 

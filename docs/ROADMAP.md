@@ -24,6 +24,13 @@ primary interface and was the biggest usability gap:
   cadquery/OCP) that was corrupting the exit code of every CLI invocation
   and test run on at least one Windows/Python 3.13 environment — see
   ADR-006 in `TECHNICAL_DECISIONS.md`.
+- Added an OBB (`clearance-mode obb`) clearance strategy: a PCA-fitted
+  oriented bounding box, expanded by clearance and subtracted, for both
+  BRep and mesh occupants. Tighter than AABB for anything rotated off the
+  world axes, without the offset-safety risk of the Offset mode. Not the
+  minimum-volume box (no convex-hull rotating calipers), and the *envelope*
+  auto-fit is still axis-aligned only — this is occupant/cutout clearance,
+  not the enclosure exterior.
 - Still open from this pass, carried into 0.2 below: `align` only supports
   min/center/max on one axis at a time (no distribute/mate-face/
   surface-offset yet); `commands.py` is not yet consumed by the desktop UI,
@@ -54,7 +61,7 @@ Delivered in this repository:
 - Add a dedicated fit-check assembly group for generated clearance bodies, separate from nominal hardware and blockers.
 - Add transform gizmo and snap increments.
 - Add align, distribute, mate-face, center-to-center, and surface-offset commands.
-- Add oriented bounding-box and convex-hull cavity modes.
+- Add convex-hull cavity mode (oriented bounding box shipped ahead of 0.2 — see above).
 - Add cable sweep/path blockers and battery swelling profiles.
 - Add local-coordinate envelope fitting.
 - Move expensive operations into cancellable workers.

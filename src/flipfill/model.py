@@ -24,6 +24,7 @@ class ClearanceMode(StrEnum):
     EXACT = "exact"
     OFFSET = "offset"
     AABB = "aabb"
+    OBB = "obb"
 
 
 class PrimitiveKind(StrEnum):

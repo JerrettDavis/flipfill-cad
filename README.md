@@ -26,10 +26,11 @@ This is not a mesh sculpting trick. The engine uses CadQuery and OpenCascade bou
 - Positions each object with numeric XYZ translation and rotation.
 - Assigns explicit roles: **Occupant**, **Cutout**, **Additive**, or **Reference**.
 - Creates box, rounded-box, cylinder, and slot primitives.
-- Applies three clearance strategies:
+- Applies four clearance strategies:
   - **Exact**: subtract the original BRep.
   - **Offset**: grow the BRep with OpenCascade before subtraction; falls back to AABB if the imported topology cannot be offset safely.
   - **AABB**: subtract an expanded world-axis-aligned bounding box. This is intentionally conservative and very robust for batteries, screens, PCBs, speakers, and wire/service volumes.
+  - **OBB**: subtract an expanded oriented (PCA-fitted) bounding box. Much tighter than AABB for a part rotated off the world axes — same robustness, less wasted material — and works for both BRep and mesh geometry.
 - Auto-fits a rounded envelope around all included objects using configurable XYZ margins.
 - Adds port, button, cable, speaker-grille, ventilation, tooling, and assembly cutouts with blocker primitives.
 - Adds bosses, pads, ribs, and other positive geometry with additive primitives or imported solids.
