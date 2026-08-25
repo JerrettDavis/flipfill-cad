@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: package (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install Linux packaging prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+      - name: Bootstrap and build the Windows package
+        if: runner.os == 'Windows'
+        run: |
+          ./scripts/bootstrap.ps1
+          ./scripts/build_windows.ps1
+        shell: pwsh
+      - name: Bootstrap and build the Linux package
+        if: runner.os == 'Linux'
+        run: |
+          ./scripts/bootstrap.sh
+          ./scripts/build_linux.sh
+      - name: Archive package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a -tzip "../FlipFillCAD-${{ github.ref_name }}-windows.zip" FlipFillCAD
+          else
+            tar -czf "../FlipFillCAD-${{ github.ref_name }}-linux.tar.gz" FlipFillCAD
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flipfill-cad-${{ runner.os }}-archive
+          path: FlipFillCAD-${{ github.ref_name }}-*
+          retention-days: 90
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Extract this version's changelog section
+        id: changelog
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="$VERSION" '
+            BEGIN { found = 0 }
+            /^## / {
+              if (found) { exit }
+              if (index($0, ver) > 0) { found = 1; next }
+              next
+            }
+            found { print }
+          ' CHANGELOG.md > release_notes.md
+          if [ ! -s release_notes.md ]; then
+            echo "See CHANGELOG.md for details." > release_notes.md
+          fi
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: FlipFill CAD ${{ github.ref_name }}
+          body_path: release_notes.md
+          files: artifacts/*
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
