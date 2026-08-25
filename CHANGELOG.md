@@ -25,6 +25,14 @@
 - Fixed `flipfill doctor`'s off-screen-rendering check crashing the whole
   process on environments with no usable OpenGL context, by isolating that
   probe in a subprocess.
+- Fixed the Linux packaging job (and any Linux user following the README's
+  `./scripts/bootstrap.sh` instructions) hitting "Permission denied" because
+  the shell scripts had lost their executable bit.
+- Added an `obb` clearance mode: a PCA-fitted oriented bounding box that
+  stays tight for occupants rotated off the world axes, unlike AABB.
+- Improved Boolean fuse/cut robustness: one retry after a topology cleanup
+  pass on failure, and a failure that still doesn't recover now names the
+  specific object and role responsible.
 
 ## 0.1.0 - 2026-08-25
 

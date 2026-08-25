@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import cadquery as cq
 import pytest
 
-from flipfill.geometry.generator import fit_envelope_to_objects, generate
+from flipfill.geometry.generator import GenerationError, fit_envelope_to_objects, generate
 from flipfill.geometry.importers import GeometryRepository
 from flipfill.model import (
     ClearanceMode,
@@ -128,6 +129,48 @@ def test_additive_is_fused() -> None:
     result = generate(project)
 
     assert result.result.Volume() == pytest.approx(10**3 + 4 * 4 * 3, abs=1.0e-5)
+
+
+def test_boolean_error_names_the_offending_object(monkeypatch: pytest.MonkeyPatch) -> None:
+    def always_fails(self, other, tol=None):
+        raise RuntimeError("simulated OCCT failure")
+
+    monkeypatch.setattr(cq.Shape, "fuse", always_fails)
+
+    project = Project()
+    project.envelope.kind = PrimitiveKind.BOX
+    project.envelope.size = Vector3(10, 10, 10)
+    project.objects.append(
+        box_object("Named Boss", Vector3(4, 4, 4), ObjectRole.ADDITIVE, center=Vector3(0, 0, 6))
+    )
+
+    with pytest.raises(GenerationError, match="Named Boss"):
+        generate(project)
+
+
+def test_boolean_recovers_after_a_cleanup_pass(monkeypatch: pytest.MonkeyPatch) -> None:
+    real_fuse = cq.Shape.fuse
+    call_count = {"n": 0}
+
+    def fails_once_then_succeeds(self, other, tol=None):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise RuntimeError("simulated transient OCCT failure")
+        return real_fuse(self, other, tol=tol)
+
+    monkeypatch.setattr(cq.Shape, "fuse", fails_once_then_succeeds)
+
+    project = Project()
+    project.envelope.kind = PrimitiveKind.BOX
+    project.envelope.size = Vector3(10, 10, 10)
+    project.objects.append(
+        box_object("boss", Vector3(4, 4, 4), ObjectRole.ADDITIVE, center=Vector3(0, 0, 6))
+    )
+
+    result = generate(project)
+
+    assert result.result.Volume() == pytest.approx(10**3 + 4 * 4 * 3, abs=1.0e-5)
+    assert any("cleanup pass" in message.message for message in result.warnings)
 
 
 def test_fit_envelope_applies_margin() -> None:

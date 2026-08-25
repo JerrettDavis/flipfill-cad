@@ -31,6 +31,11 @@ primary interface and was the biggest usability gap:
   minimum-volume box (no convex-hull rotating calipers), and the *envelope*
   auto-fit is still axis-aligned only — this is occupant/cutout clearance,
   not the enclosure exterior.
+- Improved Boolean fuse/cut robustness and diagnosability: a failure now
+  gets one retry after a `.clean()` pass on both operands (recovers a real
+  fraction of small-numerical-artifact failures), and if it still fails the
+  raised error names the specific object and role responsible instead of a
+  generic "Boolean generation failed" with no attribution.
 - Still open from this pass, carried into 0.2 below: `align` only supports
   min/center/max on one axis at a time (no distribute/mate-face/
   surface-offset yet); `commands.py` is not yet consumed by the desktop UI,

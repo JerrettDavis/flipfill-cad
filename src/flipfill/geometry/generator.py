@@ -185,17 +185,69 @@ def _subtractive_shape(
         return _aabb_clearance(resolved, scene_object.clearance_mm)
 
 
-def _fuse_many(base: cq.Shape, shapes: list[cq.Shape], tolerance: float) -> cq.Shape:
+def _boolean_step(
+    op: str,
+    result: cq.Shape,
+    shape: cq.Shape,
+    scene_object: SceneObject,
+    tolerance: float,
+    messages: list[GenerationMessage],
+) -> cq.Shape:
+    """Apply one fuse/cut step, retrying once after a topology cleanup pass.
+
+    OCCT Booleans can fail on otherwise-valid inputs because of small
+    numerical artifacts (sliver faces, duplicate edges) in one operand.
+    Retrying with both sides ``.clean()``-ed first recovers a real fraction
+    of those failures; when it doesn't, the resulting error names the
+    specific object responsible instead of a generic "Boolean generation
+    failed", so a user knows what to fix.
+    """
+
+    method = getattr(result, op)
+    try:
+        return method(shape, tol=tolerance)
+    except Exception as first_exc:
+        try:
+            cleaned_result = result.clean()
+            cleaned_shape = shape.clean()
+            recovered = getattr(cleaned_result, op)(cleaned_shape, tol=tolerance)
+        except Exception as exc:
+            raise GenerationError(
+                f"{op.capitalize()} failed while combining '{scene_object.name}' "
+                f"({scene_object.role.value}): {exc}"
+            ) from exc
+        messages.append(
+            GenerationMessage(
+                MessageLevel.WARNING,
+                f"{op.capitalize()} with '{scene_object.name}' needed a topology cleanup "
+                f"pass to succeed ({first_exc}); the result may warrant a closer look.",
+                scene_object.id,
+            )
+        )
+        return recovered
+
+
+def _fuse_many(
+    base: cq.Shape,
+    shapes: list[tuple[cq.Shape, SceneObject]],
+    tolerance: float,
+    messages: list[GenerationMessage],
+) -> cq.Shape:
     result = base
-    for shape in shapes:
-        result = result.fuse(shape, tol=tolerance)
+    for shape, scene_object in shapes:
+        result = _boolean_step("fuse", result, shape, scene_object, tolerance, messages)
     return result.clean()
 
 
-def _cut_many(base: cq.Shape, shapes: list[cq.Shape], tolerance: float) -> cq.Shape:
+def _cut_many(
+    base: cq.Shape,
+    shapes: list[tuple[cq.Shape, SceneObject]],
+    tolerance: float,
+    messages: list[GenerationMessage],
+) -> cq.Shape:
     result = base
-    for shape in shapes:
-        result = result.cut(shape, tol=tolerance)
+    for shape, scene_object in shapes:
+        result = _boolean_step("cut", result, shape, scene_object, tolerance, messages)
     return result.clean()
 
 
@@ -204,9 +256,9 @@ def generate(project: Project, repository: GeometryRepository | None = None) -> 
     messages: list[GenerationMessage] = []
     envelope = envelope_shape(project)
     generated_objects: list[GeneratedObject] = []
-    cavities: list[cq.Shape] = []
-    cutouts: list[cq.Shape] = []
-    additives: list[cq.Shape] = []
+    cavities: list[tuple[cq.Shape, SceneObject]] = []
+    cutouts: list[tuple[cq.Shape, SceneObject]] = []
+    additives: list[tuple[cq.Shape, SceneObject]] = []
 
     for scene_object in project.objects:
         try:
@@ -234,9 +286,9 @@ def generate(project: Project, repository: GeometryRepository | None = None) -> 
             )
             generated.boolean_shape = boolean_shape
             if scene_object.role is ObjectRole.OCCUPANT:
-                cavities.append(boolean_shape)
+                cavities.append((boolean_shape, scene_object))
             else:
-                cutouts.append(boolean_shape)
+                cutouts.append((boolean_shape, scene_object))
             continue
         if scene_object.role is ObjectRole.ADDITIVE:
             if resolved.brep is None:
@@ -250,18 +302,15 @@ def generate(project: Project, repository: GeometryRepository | None = None) -> 
                 )
             else:
                 generated.boolean_shape = resolved.brep
-                additives.append(resolved.brep)
+                additives.append((resolved.brep, scene_object))
 
     if any(message.level is MessageLevel.ERROR for message in messages):
         raise GenerationError(
             "Generation cannot continue because one or more scene objects failed to resolve"
         )
 
-    try:
-        result = _fuse_many(envelope, additives, project.boolean_tolerance)
-        result = _cut_many(result, cavities + cutouts, project.boolean_tolerance)
-    except Exception as exc:
-        raise GenerationError(f"Boolean generation failed: {exc}") from exc
+    result = _fuse_many(envelope, additives, project.boolean_tolerance, messages)
+    result = _cut_many(result, cavities + cutouts, project.boolean_tolerance, messages)
 
     if result.isNull():
         raise GenerationError("Boolean generation produced a null shape")
@@ -270,9 +319,9 @@ def generate(project: Project, repository: GeometryRepository | None = None) -> 
         envelope=envelope,
         result=result,
         objects=generated_objects,
-        cavity_shapes=cavities,
-        cutout_shapes=cutouts,
-        additive_shapes=additives,
+        cavity_shapes=[shape for shape, _ in cavities],
+        cutout_shapes=[shape for shape, _ in cutouts],
+        additive_shapes=[shape for shape, _ in additives],
         messages=messages,
     )
 
