@@ -72,8 +72,8 @@ jobs:
       - name: Bootstrap and build the Linux package
         if: runner.os == 'Linux'
         run: |
-          ./scripts/bootstrap.sh
-          ./scripts/build_linux.sh
+          bash scripts/bootstrap.sh
+          bash scripts/build_linux.sh
       - name: Verify the console entry point runs from the built package
         shell: bash
         run: |
