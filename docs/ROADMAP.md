@@ -1,5 +1,37 @@
 # Roadmap
 
+## Since 0.1: CLI completeness pass
+
+Delivered ahead of the 0.2 items below, because a scriptable CLI is the
+primary interface and was the biggest usability gap:
+
+- Full CLI command surface: `new`, `import`, `list`, `inspect`, `move`,
+  `rotate`, `align`, `role`, `clearance`, `blocker`, `envelope`, `split`,
+  `generate`, `validate`, `export`, `render`, `doctor`, `gui`. Every command
+  supports `--json` and returns a meaningful exit code.
+- `flipfill.commands`: an application service layer shared by the CLI (and
+  the next thing to wire into the GUI) so scene-mutation logic — not just
+  rendering — has one implementation instead of one per front end.
+- `flipfill.rendering.SceneRenderer`: the desktop viewport and the new
+  headless `flipfill render` command now share one off-screen VTK pipeline.
+- `flipfill doctor`: checks cadquery/OCP/trimesh/VTK/Tk/off-screen-rendering
+  health in one command, for fast triage on a new machine or in CI.
+- CLI integration tests, a true CLI-driven end-to-end workflow test, a
+  deterministic golden regression test on the shipped example project, and
+  malformed-input/error-path tests (`tests/test_cli.py`, `test_e2e.py`,
+  `test_golden.py`, `test_errors.py`).
+- Fixed a native access-violation crash on interpreter shutdown (importing
+  cadquery/OCP) that was corrupting the exit code of every CLI invocation
+  and test run on at least one Windows/Python 3.13 environment — see
+  ADR-006 in `TECHNICAL_DECISIONS.md`.
+- Still open from this pass, carried into 0.2 below: `align` only supports
+  min/center/max on one axis at a time (no distribute/mate-face/
+  surface-offset yet); `commands.py` is not yet consumed by the desktop UI,
+  so scene-mutation logic is still technically duplicated between the two
+  front ends even though the CLI side is now centralized; project
+  `schema_version` has no migration path — `Project.from_dict` hard-rejects
+  anything other than `1`.
+
 ## 0.1: Working vertical slice
 
 Delivered in this repository:

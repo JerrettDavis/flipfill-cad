@@ -4,33 +4,53 @@
 
 The release includes tests for:
 
-- project serialization round-trip;
-- primitive validity and dimensions;
-- negative-dimension rejection;
-- inverse-fill volume;
-- AABB clearance volume;
-- OpenCascade exact-offset execution;
-- exterior cutout behavior;
-- additive fusion;
-- envelope fit and margins;
-- planar split volume and validity;
-- occupant-overlap warning;
-- relative project paths;
-- STEP import, generation, export, and reimport;
-- fit-check assembly export; and
-- mesh import with AABB Boolean proxy.
+- project serialization round-trip (`test_model.py`);
+- primitive validity and dimensions, negative-dimension rejection (`test_primitives.py`);
+- inverse-fill volume, AABB/offset/exact clearance, exterior cutout behavior,
+  additive fusion, envelope fit and margins, planar split volume and
+  validity, occupant-overlap warning (`test_generator.py`);
+- relative project paths, STEP import/generation/export/reimport,
+  fit-check assembly export, mesh import with AABB Boolean proxy
+  (`test_io_and_export.py`);
+- every CLI command (`new` through `doctor`) including `--json` output
+  shape and nonzero exit codes on failure (`test_cli.py`);
+- a true end-to-end workflow driven only through the CLI — create, import,
+  position, classify, block, fit, split, validate zero unintended
+  intersections, generate, export, reopen, reimport and verify every
+  artifact (`test_e2e.py`);
+- a deterministic golden regression test pinning the generated/split
+  volumes of the shipped `portable_monitor_demo` example (`test_golden.py`);
+- malformed project JSON, unsupported schema versions, unknown enum
+  values, and other error paths (`test_errors.py`).
 
 Every test performs real geometry operations. No CAD-kernel behavior is mocked.
 
+## Still open from this plan
+
+- GUI smoke tests beyond "does the process start under Xvfb" (no
+  interaction-level Tk automation yet).
+- The fixture corpus below (multi-solid, assembly, IGES, non-manifold,
+  high-face-count, offset-hostile, non-mm-unit fixtures) — today's fixtures
+  are the three `examples/assets/*.step` demo parts plus ad-hoc boxes
+  generated in tests.
+- Visual/perceptual regression on rendered images.
+- `mypy` is configured but not wired into CI (see `docs/TECHNICAL_DECISIONS.md`
+  ADR list — blocked on a third-party stub bug in `casadi`, not our code).
+
 ## CI matrix
 
-The workflow targets:
+The workflow (`.github/workflows/ci.yml`) targets:
 
 - Windows and Ubuntu;
 - Python 3.11, 3.12, and 3.13;
-- unit/integration tests;
-- static linting; and
-- Linux GUI startup under Xvfb.
+- unit/integration tests with coverage collection;
+- static linting (ruff);
+- Linux GUI startup under Xvfb; and
+- a separate `build` job that bootstraps and PyInstaller-packages both
+  platforms on every push/PR, verifying the packaged entry point exists.
+
+`.github/workflows/release.yml` builds and publishes both platform packages
+to a GitHub Release whenever a `v*.*.*` tag is pushed.
 
 ## Required fixture corpus for 0.2
 

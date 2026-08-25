@@ -22,6 +22,30 @@ Exact geometry can include component-detail cavities that are undesirable in a p
 
 A successful Boolean is not proof of a useful enclosure. Exporting the result and hardware together allows independent inspection, sectioning, and measurement in Fusion 360.
 
+## ADR-006: os._exit() at the real process entry point, not inside main()
+
+Importing `cadquery`/OCP has been observed to crash the interpreter with a
+native access violation during Python's own finalization, on at least one
+real Windows/Python 3.13 environment, well after every command has already
+completed correctly. Left alone this corrupts the process exit code, which
+would make every scripted `flipfill` call and every CI test run look like a
+failure regardless of what actually happened -- unacceptable for a CLI-first
+tool whose whole value proposition is scriptability.
+
+The fix is `os._exit()` at the outermost boundary: `flipfill.cli.run()` (the
+`flipfill` console script and `python -m flipfill` both call this, not
+`main()`) and a `pytest_unconfigure` hook in `tests/conftest.py`, each
+determining the real exit code, flushing stdout/stderr, then terminating
+immediately -- skipping Python's normal, here-unreliable, interpreter
+teardown. `flipfill.cli.main()` itself stays a normal function that returns
+an `int` and never exits the process, so library and test code that calls it
+directly (see `tests/test_cli.py`) is unaffected.
+
+This is a workaround for third-party native code, not a fix for our own; it
+should be revisited (and likely removed) once upstream `cadquery`/OCP wheels
+resolve the underlying shutdown bug. See `docs/ARCHITECTURE.md` for where
+each hook lives.
+
 ## Primary technical sources
 
 - CadQuery documentation: https://cadquery.readthedocs.io/

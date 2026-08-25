@@ -42,7 +42,7 @@ This is not a mesh sculpting trick. The engine uses CadQuery and OpenCascade bou
   - optional split-half STEP files;
   - a **fit-check STEP assembly** containing the result plus positioned hardware; and
   - the plain-JSON project file.
-- Runs through either a desktop GUI or a headless CLI.
+- Runs through a fully scriptable headless CLI (17 commands, `--json` output, meaningful exit codes) or the desktop GUI — see [CLI reference](#cli-reference).
 
 ## Quick start on Windows
 
@@ -160,23 +160,44 @@ A blocker that does not intersect the envelope produces a warning because it rem
 
 Export the generated body and the fit-check assembly. Open the fit-check assembly in Fusion 360 and inspect cross-sections before printing. The assembly is the safest way to verify that no hardware, battery pouch, port, wire path, or speaker volume is being clipped.
 
-## Headless usage
+## CLI reference
 
-Validate a project:
-
-```bash
-python -m flipfill validate examples/portable_monitor_demo.flipfill.json
-```
-
-Generate production and fit-check files:
+The CLI is the primary way to drive FlipFill. Every scene edit the desktop GUI can make has a scripted equivalent, backed by the same `flipfill.commands` service layer and `flipfill.geometry` pipeline the GUI uses — nothing is re-implemented per front end. Mutating commands load a project, apply one change, and save it back to disk, so they compose in shell scripts. Every command accepts `--json` where structured output is useful, and returns a nonzero exit code on failure.
 
 ```bash
-python -m flipfill generate \
-  examples/portable_monitor_demo.flipfill.json \
-  --output out/enclosure.step \
-  --fitcheck out/enclosure_fitcheck.step \
-  --split-dir out
+flipfill new my_case.flipfill.json --name "Handheld Case"
+flipfill import my_case.flipfill.json battery.step --role occupant --clearance 0.5
+flipfill move my_case.flipfill.json Battery --x 0 --y 0 --z 4
+flipfill blocker my_case.flipfill.json --role cutout --kind box --size 10 6 6 --at-x 20 --at-y 0 --at-z 0
+flipfill envelope my_case.flipfill.json --fit --margin 3 3 3
+flipfill split my_case.flipfill.json --enable --axis z --offset 1.5 --gap 0.35
+flipfill generate my_case.flipfill.json -o out/case.step --fitcheck out/case_fitcheck.step --split-dir out
+flipfill validate my_case.flipfill.json --json
+flipfill render my_case.flipfill.json out/preview.png --view iso
+flipfill doctor
 ```
+
+Run `flipfill <command> --help` for a command's full options and examples. The full command set:
+
+| Command | Purpose |
+|---|---|
+| `new` | Create a new, empty project |
+| `import` | Import one or more STEP/STP/BREP/IGES/mesh files as scene objects |
+| `list` | List scene objects |
+| `inspect` | Show full detail (and resolved bounds) for a project or one object |
+| `move` / `rotate` | Set or offset (`--relative`) an object's position/rotation |
+| `align` | Align one axis of an object's bounds to another object or the origin |
+| `role` | Set an object's scene role (occupant/cutout/additive/reference) |
+| `clearance` | Set an object's clearance mode and/or distance |
+| `blocker` | Add a primitive occupant, cutout blocker, or additive |
+| `envelope` | Configure or auto-fit the enclosure envelope |
+| `split` | Configure the planar split applied during generate/export |
+| `generate` | Run the full pipeline and export the generated body (+ fit-check + split) |
+| `validate` | Run geometric validation without exporting |
+| `export` | Generate and export a single artifact: STEP, STL, fit-check, or a full package |
+| `render` | Render a PNG preview without a desktop session (headless, CI-friendly) |
+| `doctor` | Check that the CAD/rendering environment (cadquery, OCP, VTK, Tk) is healthy |
+| `gui` | Launch the desktop application |
 
 This makes the same geometry engine usable in CI, regression tests, scripted product families, and future agentic workflows.
 
@@ -220,11 +241,13 @@ Primary references:
 
 ```bash
 python -m pip install -e ".[dev]"
-pytest
+pytest --cov=flipfill --cov-report=term-missing
 ruff check src tests examples
 ```
 
-The tests generate real OpenCascade solids, execute Booleans, round-trip STEP, inspect volumes, validate split outputs, and exercise mesh/AABB fallback behavior.
+The suite (`tests/`) covers domain/transform math, geometry regressions, import/export round trips, mesh/AABB fallback behavior, CLI integration (`test_cli.py`), a true end-to-end workflow driven only through the CLI (`test_e2e.py`), a deterministic golden test pinned to the shipped example project (`test_golden.py`), and malformed-input/error-path handling (`test_errors.py`). Tests generate real OpenCascade solids and execute real Booleans — nothing is mocked.
+
+`mypy` is configured (`pyproject.toml`, strict) but not currently wired into CI: a bundled stub in `casadi` (a transitive dependency of `cadquery`'s assembly solver) has a parse-breaking bug in some versions. Run it locally if you want the extra signal: `mypy src/flipfill`.
 
 See:
 
