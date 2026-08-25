@@ -1,0 +1,71 @@
+name: CAD import/export problem
+description: A STEP/STP/BREP/IGES/mesh file fails to import, imports incorrectly, or a generated STEP export is wrong/unusable downstream.
+title: "[CAD]: "
+labels: ["cad-io", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Geometry-kernel bugs are the hardest to fix without a reproducible file. If
+        you can share (or describe) the offending geometry, please attach a minimal
+        STEP/BREP/IGES/mesh file that reproduces the problem — strip proprietary
+        detail if needed, but keep the topology that triggers the failure.
+  - type: dropdown
+    id: direction
+    attributes:
+      label: Direction
+      options:
+        - Import (STEP/STP/BREP/IGES)
+        - Import (mesh reference: STL/OBJ/PLY/OFF/3MF/glTF)
+        - Export (generated STEP/STL/BREP)
+        - Export (fit-check assembly STEP)
+        - Round-trip (export, then re-import elsewhere)
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Error message, wrong geometry, missing bodies, wrong scale/units, broken assembly tree, etc.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. flipfill import demo.flipfill.json part.step --role occupant
+        2. flipfill generate demo.flipfill.json --output out.step
+        3. Open out.step in Fusion 360 / FreeCAD / ...
+    validations:
+      required: true
+  - type: textarea
+    id: file
+    attributes:
+      label: Reproducing file
+      description: Attach or link a minimal STEP/BREP/IGES/mesh file that reproduces the problem, or describe why one cannot be shared.
+    validations:
+      required: true
+  - type: input
+    id: source-cad
+    attributes:
+      label: Originating CAD system (if known)
+      description: e.g. Fusion 360, SolidWorks, FreeCAD, a vendor-supplied model
+  - type: input
+    id: version
+    attributes:
+      label: FlipFill CAD version
+      description: Output of `flipfill --version`
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - Linux
+        - macOS
+        - Other
+    validations:
+      required: true
