@@ -272,13 +272,30 @@ def test_validate_missing_project_returns_nonzero(tmp_path: Path) -> None:
     assert code != 0
 
 
-def test_doctor_reports_ok(capsys: pytest.CaptureFixture[str]) -> None:
+def test_doctor_reports_environment_checks(capsys: pytest.CaptureFixture[str]) -> None:
+    """doctor must never crash, even on CI/VM images with no usable display
+    or OpenGL context -- it exists to *diagnose* exactly that condition, so
+    checks that depend on it (Tk, off-screen rendering) are allowed to fail
+    here without failing the test. cadquery/OCP/trimesh must always pass:
+    this process already imported and exercised them in other tests."""
+
     code = main(["doctor", "--json"])
 
     payload = json.loads(capsys.readouterr().out)
-    assert code == 0
-    assert payload["ok"] is True
-    assert any(check["name"] == "cadquery" for check in payload["checks"])
+    assert code in (0, 1)
+    checks_by_name = {check["name"]: check for check in payload["checks"]}
+    assert set(checks_by_name) == {
+        "python",
+        "cadquery",
+        "OCP (OpenCascade bindings)",
+        "trimesh",
+        "VTK",
+        "Tk display",
+        "Off-screen rendering",
+    }
+    for name in ("python", "cadquery", "OCP (OpenCascade bindings)", "trimesh", "VTK"):
+        assert checks_by_name[name]["ok"] is True, checks_by_name[name]
+    assert payload["ok"] == all(check["ok"] for check in payload["checks"])
 
 
 def test_missing_command_argument_exits_nonzero() -> None:

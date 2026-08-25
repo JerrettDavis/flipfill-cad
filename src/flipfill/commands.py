@@ -490,21 +490,69 @@ def run_doctor() -> DoctorReport:
             )
         )
 
-    try:
-        from flipfill.rendering import SceneRenderer
-
-        scene = SceneRenderer(width=64, height=64)
-        scene.render_to_image(64, 64)
-        report.checks.append(
-            DoctorCheck("Off-screen rendering", True, "produced a test frame")
-        )
-    except Exception as exc:
-        report.checks.append(
-            DoctorCheck(
-                "Off-screen rendering",
-                False,
-                f"'flipfill render' and viewport previews will fail: {exc}",
-            )
-        )
+    report.checks.append(_probe_offscreen_rendering())
 
     return report
+
+
+_RENDER_PROBE_SOURCE = (
+    "import os\n"
+    "try:\n"
+    "    from flipfill.rendering import SceneRenderer\n"
+    "    SceneRenderer(width=64, height=64).render_to_image(64, 64)\n"
+    "except BaseException:\n"
+    "    os._exit(1)\n"
+    "os._exit(0)\n"
+)
+
+
+def _probe_offscreen_rendering() -> DoctorCheck:
+    """Check that VTK can actually produce an off-screen frame.
+
+    VTK's OpenGL2 backend has been observed to hard-crash the interpreter
+    (segfault on Linux, access violation on Windows) rather than raise a
+    catchable exception when no usable OpenGL context is available (no
+    display on Linux, no GPU/driver support on some CI/VM images). A
+    diagnostic command must never crash while diagnosing, and a crash here
+    must not be allowed to take down whatever process called ``run_doctor``
+    (the CLI, a test suite, ...), so the actual render attempt runs in an
+    isolated subprocess.
+
+    The probe script calls ``os._exit()`` itself as soon as it knows the
+    outcome (see ADR-006): merely importing cadquery/OCP and letting a
+    process exit normally can itself corrupt the exit code during Python's
+    own finalization on some platforms, which would make this probe
+    misreport an unrelated interpreter-shutdown bug as a rendering failure.
+    """
+
+    import subprocess
+    import sys
+
+    try:
+        probe = subprocess.run(
+            [sys.executable, "-c", _RENDER_PROBE_SOURCE],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        return DoctorCheck(
+            "Off-screen rendering",
+            False,
+            "'flipfill render' and viewport previews will fail: the render probe "
+            "did not finish within 30s.",
+        )
+
+    if probe.returncode == 0:
+        return DoctorCheck("Off-screen rendering", True, "produced a test frame")
+
+    detail = probe.stderr.strip().splitlines()[-1] if probe.stderr.strip() else None
+    reason = detail or f"the probe process exited with code {probe.returncode}"
+    return DoctorCheck(
+        "Off-screen rendering",
+        False,
+        f"'flipfill render' and viewport previews will fail here ({reason}). This "
+        "usually means no OpenGL context is available: on Linux, run under Xvfb "
+        "or a real X/Wayland session; on a GPU-less CI runner or VM this may not "
+        "be fixable from software alone.",
+    )
