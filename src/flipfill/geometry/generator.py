@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Iterable
+from enum import StrEnum
 
 import cadquery as cq
 
@@ -22,7 +22,7 @@ from flipfill.model import (
 )
 
 
-class MessageLevel(str, Enum):
+class MessageLevel(StrEnum):
     INFO = "info"
     WARNING = "warning"
     ERROR = "error"

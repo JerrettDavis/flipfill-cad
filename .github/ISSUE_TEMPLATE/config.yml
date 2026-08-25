@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a usage question
+    url: https://github.com/JerrettDavis/flipfill-cad/discussions
+    about: Questions about workflows, project files, or CAD semantics belong in Discussions, not Issues.

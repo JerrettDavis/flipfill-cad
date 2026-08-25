@@ -21,7 +21,7 @@ def box_object(
     name: str,
     size: Vector3,
     role: ObjectRole,
-    center: Vector3 = Vector3(),
+    center: Vector3 | None = None,
     clearance: float = 0.0,
     mode: ClearanceMode = ClearanceMode.EXACT,
 ) -> SceneObject:
@@ -29,7 +29,7 @@ def box_object(
         name=name,
         role=role,
         primitive=PrimitiveSpec(PrimitiveKind.BOX, size),
-        transform=Transform(translation=center),
+        transform=Transform(translation=center if center is not None else Vector3()),
         clearance_mode=mode,
         clearance_mm=clearance,
         included_in_envelope_fit=role is not ObjectRole.CUTOUT,

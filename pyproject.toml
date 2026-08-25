@@ -37,7 +37,7 @@ dev = [
 ]
 
 [project.scripts]
-flipfill = "flipfill.cli:main"
+flipfill = "flipfill.cli:run"
 
 [project.gui-scripts]
 flipfill-gui = "flipfill.ui.launcher:main"
@@ -56,13 +56,36 @@ src = ["src", "tests", "examples"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
-ignore = ["E501"]
+# E501: line length is handled by the formatter, not worth failing CI over.
+# RUF001: the CLI/GUI deliberately use "∪ − ×" in the inverse-fill equation
+# and dimension strings for readability; not a bug to flag.
+ignore = ["E501", "RUF001"]
 
 [tool.mypy]
-python_version = "3.11"
+# numpy's bundled stubs use 3.12+ typing syntax (PEP 695 `type` statements);
+# this only affects how mypy parses installed stubs, not the runtime
+# versions flipfill supports (3.11-3.13, see requires-python above).
+python_version = "3.12"
 strict = true
 warn_unused_ignores = true
 packages = ["flipfill"]
+
+[[tool.mypy.overrides]]
+# The OpenCascade Python bindings ship no type stubs or py.typed marker.
+module = ["OCP", "OCP.*", "cadquery_ocp", "cadquery_ocp.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# casadi (a hard dependency of cadquery's assembly solver, never imported
+# by flipfill directly) ships a generated .pyi with a duplicate-parameter
+# bug that is a mypy *parse* error, not a semantic one, so per-module
+# ignore_errors cannot suppress it: as of mypy 1.20 + casadi 3.8.0 this
+# blocks `mypy src/flipfill` entirely regardless of follow_imports/
+# ignore_errors settings. Tracked upstream; not wired into CI until fixed.
+# Once resolved, run `mypy src/flipfill` and add it to .github/workflows/ci.yml.
+module = ["casadi", "casadi.*"]
+ignore_missing_imports = true
+ignore_errors = true
 
 [tool.coverage.run]
 source = ["flipfill"]

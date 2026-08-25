@@ -1,3 +1,3 @@
-from flipfill.cli import main
+from flipfill.cli import run
 
-raise SystemExit(main())
+run()

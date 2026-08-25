@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 from uuid import uuid4
 
 
-class ObjectRole(str, Enum):
+class ObjectRole(StrEnum):
     """How an object participates in inverse-fill generation."""
 
     OCCUPANT = "occupant"
@@ -17,7 +18,7 @@ class ObjectRole(str, Enum):
     RESULT = "result"
 
 
-class ClearanceMode(str, Enum):
+class ClearanceMode(StrEnum):
     """How an occupant is expanded before subtraction."""
 
     EXACT = "exact"
@@ -25,20 +26,20 @@ class ClearanceMode(str, Enum):
     AABB = "aabb"
 
 
-class PrimitiveKind(str, Enum):
+class PrimitiveKind(StrEnum):
     BOX = "box"
     ROUNDED_BOX = "rounded_box"
     CYLINDER = "cylinder"
     SLOT = "slot"
 
 
-class GeometryKind(str, Enum):
+class GeometryKind(StrEnum):
     BREP = "brep"
     MESH = "mesh"
     PRIMITIVE = "primitive"
 
 
-class SplitAxis(str, Enum):
+class SplitAxis(StrEnum):
     X = "x"
     Y = "y"
     Z = "z"
@@ -54,7 +55,7 @@ class Vector3:
         return [float(self.x), float(self.y), float(self.z)]
 
     @classmethod
-    def from_value(cls, value: Any, default: "Vector3 | None" = None) -> "Vector3":
+    def from_value(cls, value: Any, default: Vector3 | None = None) -> Vector3:
         if value is None:
             return default or cls()
         if isinstance(value, cls):
@@ -69,13 +70,13 @@ class Vector3:
             return cls(float(value[0]), float(value[1]), float(value[2]))
         raise ValueError(f"Expected a 3-vector, got {value!r}")
 
-    def __add__(self, other: "Vector3") -> "Vector3":
+    def __add__(self, other: Vector3) -> Vector3:
         return Vector3(self.x + other.x, self.y + other.y, self.z + other.z)
 
-    def __sub__(self, other: "Vector3") -> "Vector3":
+    def __sub__(self, other: Vector3) -> Vector3:
         return Vector3(self.x - other.x, self.y - other.y, self.z - other.z)
 
-    def scaled(self, factor: float) -> "Vector3":
+    def scaled(self, factor: float) -> Vector3:
         return Vector3(self.x * factor, self.y * factor, self.z * factor)
 
 
@@ -91,7 +92,7 @@ class Transform:
         }
 
     @classmethod
-    def from_dict(cls, value: dict[str, Any] | None) -> "Transform":
+    def from_dict(cls, value: dict[str, Any] | None) -> Transform:
         value = value or {}
         return cls(
             translation=Vector3.from_value(value.get("translation")),
@@ -113,7 +114,7 @@ class PrimitiveSpec:
         }
 
     @classmethod
-    def from_dict(cls, value: dict[str, Any]) -> "PrimitiveSpec":
+    def from_dict(cls, value: dict[str, Any]) -> PrimitiveSpec:
         return cls(
             kind=PrimitiveKind(value.get("kind", PrimitiveKind.BOX.value)),
             size=Vector3.from_value(value.get("size"), Vector3(20.0, 20.0, 20.0)),
@@ -163,7 +164,7 @@ class SceneObject:
         }
 
     @classmethod
-    def from_dict(cls, value: dict[str, Any]) -> "SceneObject":
+    def from_dict(cls, value: dict[str, Any]) -> SceneObject:
         color = value.get("color")
         return cls(
             id=str(value.get("id") or uuid4()),
@@ -205,7 +206,7 @@ class EnvelopeSpec:
         }
 
     @classmethod
-    def from_dict(cls, value: dict[str, Any] | None) -> "EnvelopeSpec":
+    def from_dict(cls, value: dict[str, Any] | None) -> EnvelopeSpec:
         value = value or {}
         return cls(
             kind=PrimitiveKind(
@@ -236,7 +237,7 @@ class SplitSpec:
         }
 
     @classmethod
-    def from_dict(cls, value: dict[str, Any] | None) -> "SplitSpec":
+    def from_dict(cls, value: dict[str, Any] | None) -> SplitSpec:
         value = value or {}
         return cls(
             enabled=bool(value.get("enabled", False)),
@@ -272,7 +273,7 @@ class Project:
         }
 
     @classmethod
-    def from_dict(cls, value: dict[str, Any]) -> "Project":
+    def from_dict(cls, value: dict[str, Any]) -> Project:
         schema_version = int(value.get("schema_version", 1))
         if schema_version != 1:
             raise ValueError(

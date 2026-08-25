@@ -22,16 +22,15 @@ from flipfill.model import (
 )
 from flipfill.project_io import save_project
 
-
 ROOT = Path(__file__).resolve().parent
 ASSETS = ROOT / "assets"
 ASSETS.mkdir(parents=True, exist_ok=True)
 
 
-def rounded(size: Vector3, radius: float, translation: Vector3 = Vector3()) -> cq.Shape:
+def rounded(size: Vector3, radius: float, translation: Vector3 | None = None) -> cq.Shape:
     return make_primitive(
         PrimitiveSpec(PrimitiveKind.ROUNDED_BOX, size, radius),
-        Transform(translation=translation),
+        Transform(translation=translation if translation is not None else Vector3()),
     )
 
 

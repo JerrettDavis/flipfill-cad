@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import cadquery as cq
 
-from flipfill.model import PrimitiveKind, PrimitiveSpec, Transform, Vector3
 from flipfill.geometry.transforms import transform_shape
+from flipfill.model import PrimitiveKind, PrimitiveSpec, Transform, Vector3
 
 
 class PrimitiveError(ValueError):

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 import cadquery as cq
 import numpy as np
@@ -35,7 +35,7 @@ class Bounds3D:
         size = self.size
         return max(0.0, size.x) * max(0.0, size.y) * max(0.0, size.z)
 
-    def expanded(self, amount: Vector3 | float) -> "Bounds3D":
+    def expanded(self, amount: Vector3 | float) -> Bounds3D:
         if isinstance(amount, (int, float)):
             amount = Vector3(float(amount), float(amount), float(amount))
         return Bounds3D(
@@ -51,7 +51,7 @@ class Bounds3D:
             ),
         )
 
-    def contains(self, other: "Bounds3D", tolerance: float = 1.0e-6) -> bool:
+    def contains(self, other: Bounds3D, tolerance: float = 1.0e-6) -> bool:
         return (
             self.minimum.x <= other.minimum.x + tolerance
             and self.minimum.y <= other.minimum.y + tolerance
@@ -62,7 +62,7 @@ class Bounds3D:
         )
 
     @classmethod
-    def union(cls, bounds: Iterable["Bounds3D"]) -> "Bounds3D":
+    def union(cls, bounds: Iterable[Bounds3D]) -> Bounds3D:
         values = list(bounds)
         if not values:
             raise ValueError("Cannot compute the union of an empty bounds collection")

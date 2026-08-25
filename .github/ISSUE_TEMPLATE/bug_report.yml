@@ -1,0 +1,60 @@
+name: Bug report
+description: Something in the CLI, GUI, or geometry engine behaves incorrectly.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please include enough detail to reproduce the
+        problem headlessly with `flipfill validate`/`flipfill generate` if possible —
+        that lets us bisect without a display.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Exact CLI commands, or GUI steps, in order.
+      placeholder: |
+        1. flipfill new demo.flipfill.json
+        2. flipfill import demo.flipfill.json part.step --role occupant
+        3. flipfill generate demo.flipfill.json --output out.step
+        4. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output / traceback
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: FlipFill CAD version
+      description: Output of `flipfill --version`
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - Linux
+        - macOS
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: Output of `python --version`
+    validations:
+      required: true

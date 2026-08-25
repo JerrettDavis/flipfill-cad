@@ -3,9 +3,9 @@ from __future__ import annotations
 import copy
 import sys
 import tkinter as tk
+from collections.abc import Callable
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from typing import Callable
 
 from flipfill.geometry.exporters import export_fitcheck_assembly, export_shape
 from flipfill.geometry.generator import (
@@ -28,7 +28,6 @@ from flipfill.model import (
 )
 from flipfill.project_io import load_project, save_project
 from flipfill.ui.viewport import CadViewport
-
 
 ENVELOPE_ID = "__envelope__"
 RESULT_ID = "__result__"
@@ -1059,7 +1058,7 @@ class FlipFillApp:
             for character in self.project.name
         ).strip("_") or "flipfill"
         try:
-            result_step = export_shape(generated.result, output / f"{safe_name}.step")
+            export_shape(generated.result, output / f"{safe_name}.step")
             export_shape(generated.result, output / f"{safe_name}.stl")
             export_fitcheck_assembly(
                 self.project, generated, output / f"{safe_name}_fitcheck.step"
