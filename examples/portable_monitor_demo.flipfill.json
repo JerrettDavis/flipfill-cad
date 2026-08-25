@@ -1,0 +1,282 @@
+{
+  "schema_version": 1,
+  "name": "Portable Touch Monitor Demo",
+  "units": "mm",
+  "objects": [
+    {
+      "id": "1d3c099b-e060-48dd-970a-d02ef303a420",
+      "name": "3.5in Display Module",
+      "role": "occupant",
+      "transform": {
+        "translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_deg": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_path": "assets/demo_display_module.step",
+      "primitive": null,
+      "visible": true,
+      "included_in_envelope_fit": true,
+      "clearance_mode": "aabb",
+      "clearance_mm": 0.6,
+      "color": null,
+      "metadata": {}
+    },
+    {
+      "id": "dbd45b45-4cc9-4368-b974-1ae17959555b",
+      "name": "LiPo Battery",
+      "role": "occupant",
+      "transform": {
+        "translation": [
+          0.0,
+          15.0,
+          9.5
+        ],
+        "rotation_deg": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_path": "assets/demo_battery.step",
+      "primitive": null,
+      "visible": true,
+      "included_in_envelope_fit": true,
+      "clearance_mode": "aabb",
+      "clearance_mm": 0.7,
+      "color": null,
+      "metadata": {}
+    },
+    {
+      "id": "3d8d01c8-860c-409f-a445-b26406b7e456",
+      "name": "Speaker",
+      "role": "occupant",
+      "transform": {
+        "translation": [
+          0.0,
+          -33.0,
+          8.0
+        ],
+        "rotation_deg": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_path": "assets/demo_speaker.step",
+      "primitive": null,
+      "visible": true,
+      "included_in_envelope_fit": true,
+      "clearance_mode": "offset",
+      "clearance_mm": 0.5,
+      "color": null,
+      "metadata": {}
+    },
+    {
+      "id": "6b4ca11e-c605-48bc-998b-3e1384d4356e",
+      "name": "Screen Opening",
+      "role": "cutout",
+      "transform": {
+        "translation": [
+          0.0,
+          -2.0,
+          -7.0
+        ],
+        "rotation_deg": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_path": null,
+      "primitive": {
+        "kind": "rounded_box",
+        "size": [
+          49.0,
+          75.0,
+          10.0
+        ],
+        "radius": 2.0
+      },
+      "visible": true,
+      "included_in_envelope_fit": false,
+      "clearance_mode": "exact",
+      "clearance_mm": 0.0,
+      "color": null,
+      "metadata": {}
+    },
+    {
+      "id": "668f1289-5179-4896-b4f0-5365de5ae716",
+      "name": "USB-C Side Access",
+      "role": "cutout",
+      "transform": {
+        "translation": [
+          30.5,
+          35.0,
+          1.5
+        ],
+        "rotation_deg": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_path": null,
+      "primitive": {
+        "kind": "rounded_box",
+        "size": [
+          14.0,
+          10.0,
+          8.0
+        ],
+        "radius": 2.0
+      },
+      "visible": true,
+      "included_in_envelope_fit": false,
+      "clearance_mode": "exact",
+      "clearance_mm": 0.0,
+      "color": null,
+      "metadata": {}
+    },
+    {
+      "id": "9d42d00b-1db2-463c-83cc-4af80293a735",
+      "name": "Button Access",
+      "role": "cutout",
+      "transform": {
+        "translation": [
+          -30.5,
+          35.0,
+          1.5
+        ],
+        "rotation_deg": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_path": null,
+      "primitive": {
+        "kind": "box",
+        "size": [
+          10.0,
+          12.0,
+          8.0
+        ],
+        "radius": 2.0
+      },
+      "visible": true,
+      "included_in_envelope_fit": false,
+      "clearance_mode": "exact",
+      "clearance_mm": 0.0,
+      "color": null,
+      "metadata": {}
+    },
+    {
+      "id": "c689a31d-e542-4cfd-8146-b1360c829596",
+      "name": "Speaker Grille Opening",
+      "role": "cutout",
+      "transform": {
+        "translation": [
+          0.0,
+          -33.0,
+          14.0
+        ],
+        "rotation_deg": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_path": null,
+      "primitive": {
+        "kind": "cylinder",
+        "size": [
+          24.0,
+          24.0,
+          10.0
+        ],
+        "radius": 2.0
+      },
+      "visible": true,
+      "included_in_envelope_fit": false,
+      "clearance_mode": "exact",
+      "clearance_mm": 0.0,
+      "color": null,
+      "metadata": {}
+    },
+    {
+      "id": "a79ebe1a-6128-43f1-a8d1-fd4ecb75d197",
+      "name": "Lanyard Channel",
+      "role": "cutout",
+      "transform": {
+        "translation": [
+          27.0,
+          -47.0,
+          6.0
+        ],
+        "rotation_deg": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_path": null,
+      "primitive": {
+        "kind": "cylinder",
+        "size": [
+          5.0,
+          5.0,
+          12.0
+        ],
+        "radius": 2.0
+      },
+      "visible": true,
+      "included_in_envelope_fit": false,
+      "clearance_mode": "exact",
+      "clearance_mm": 0.0,
+      "color": null,
+      "metadata": {}
+    }
+  ],
+  "envelope": {
+    "kind": "rounded_box",
+    "size": [
+      62.5,
+      109.5,
+      23.8
+    ],
+    "transform": {
+      "translation": [
+        0.0,
+        0.0,
+        4.6
+      ],
+      "rotation_deg": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "radius": 6.0,
+    "fit_margin": [
+      4.0,
+      4.0,
+      3.0
+    ]
+  },
+  "split": {
+    "enabled": true,
+    "axis": "z",
+    "offset": 1.5,
+    "gap": 0.35
+  },
+  "boolean_tolerance": 0.0001,
+  "tessellation_tolerance": 0.15,
+  "notes": ""
+}

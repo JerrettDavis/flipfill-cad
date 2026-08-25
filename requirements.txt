@@ -1,0 +1,4 @@
+cadquery==2.8.0
+numpy>=1.26,<3
+Pillow>=11,<13
+trimesh>=4.11.4,<5
