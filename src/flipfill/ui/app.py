@@ -40,6 +40,9 @@ class FlipFillApp:
         self.root.geometry("1480x900")
         self.root.minsize(1120, 700)
 
+        self.appearance = tk.StringVar(value="Dark")
+        self.palette: dict[str, str] = {}
+
         self.project = Project()
         self.project_path: Path | None = None
         self.repository = GeometryRepository()
@@ -53,6 +56,7 @@ class FlipFillApp:
         self._build_toolbar()
         self._build_workspace()
         self._build_statusbar()
+        self._apply_theme()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         if initial_project:
@@ -68,13 +72,76 @@ class FlipFillApp:
         available = style.theme_names()
         if "clam" in available:
             style.theme_use("clam")
-        style.configure("Toolbar.TFrame", padding=5)
-        style.configure("Title.TLabel", font=("Segoe UI", 11, "bold"))
-        style.configure("Section.TLabel", font=("Segoe UI", 10, "bold"))
-        style.configure("Danger.TLabel", foreground="#b03a2e")
+        self._apply_theme()
+
+    def _apply_theme(self) -> None:
+        dark = self.appearance.get() == "Dark"
+        p = {
+            "bg": "#17191d" if dark else "#f3f4f6",
+            "panel": "#202329" if dark else "#ffffff",
+            "panel_2": "#282c33" if dark else "#e9ebef",
+            "field": "#15171b" if dark else "#ffffff",
+            "text": "#f1f3f5" if dark else "#20242b",
+            "muted": "#9ba3af" if dark else "#626b78",
+            "border": "#383e47" if dark else "#cbd0d8",
+            "accent": "#3b82f6",
+            "accent_active": "#2563eb",
+            "selection": "#245da8" if dark else "#cfe2ff",
+            "danger": "#ff7272" if dark else "#b42318",
+        }
+        self.palette = p
+        self.root.configure(background=p["bg"])
+        style = ttk.Style(self.root)
+        style.configure(".", background=p["panel"], foreground=p["text"], font=("Segoe UI", 9))
+        style.configure("TFrame", background=p["panel"])
+        style.configure("Toolbar.TFrame", background=p["panel"], padding=(12, 8))
+        style.configure("Status.TFrame", background=p["panel"], padding=(12, 5))
+        style.configure("TLabel", background=p["panel"], foreground=p["text"])
+        style.configure("Title.TLabel", font=("Segoe UI Semibold", 11), foreground=p["text"])
+        style.configure("Brand.TLabel", font=("Segoe UI Semibold", 13), foreground=p["text"])
+        style.configure("Muted.TLabel", foreground=p["muted"])
+        style.configure("Section.TLabel", font=("Segoe UI Semibold", 9), foreground=p["muted"])
+        style.configure("Danger.TLabel", foreground=p["danger"])
+        style.configure("TButton", padding=(10, 6), background=p["panel_2"], foreground=p["text"], relief="flat")
+        style.map("TButton", background=[("active", p["border"]), ("pressed", p["field"])])
+        style.configure("Accent.TButton", background=p["accent"], foreground="#ffffff", font=("Segoe UI Semibold", 9))
+        style.map("Accent.TButton", background=[("active", p["accent_active"]), ("pressed", p["accent_active"])])
+        style.configure("Tool.TButton", padding=(9, 5))
+        style.configure("TEntry", fieldbackground=p["field"], foreground=p["text"], insertcolor=p["text"], bordercolor=p["border"], padding=5)
+        style.configure("TCombobox", fieldbackground=p["field"], foreground=p["text"], arrowcolor=p["muted"], padding=4)
+        style.map("TCombobox", fieldbackground=[("readonly", p["field"])], foreground=[("readonly", p["text"])])
+        style.configure("Treeview", background=p["panel"], fieldbackground=p["panel"], foreground=p["text"], bordercolor=p["border"], rowheight=27)
+        style.configure("Treeview.Heading", background=p["panel_2"], foreground=p["muted"], font=("Segoe UI Semibold", 8), padding=(5, 6), relief="flat")
+        style.map("Treeview", background=[("selected", p["selection"])], foreground=[("selected", "#ffffff" if dark else p["text"])])
+        style.configure("TNotebook", background=p["panel"], bordercolor=p["border"])
+        style.configure("TNotebook.Tab", background=p["panel"], foreground=p["muted"], padding=(14, 8), font=("Segoe UI Semibold", 9))
+        style.map("TNotebook.Tab", background=[("selected", p["panel_2"])], foreground=[("selected", p["text"])])
+        style.configure("TSeparator", background=p["border"])
+        if hasattr(self, "pane"):
+            self.pane.configure(bg=p["border"])
+        if hasattr(self, "log"):
+            self.log.configure(background=p["field"], foreground=p["text"], insertbackground=p["text"], selectbackground=p["selection"], relief=tk.FLAT)
+        if hasattr(self, "viewport"):
+            self.viewport.set_theme(dark)
+        if hasattr(self, "menu"):
+            self._style_menu(self.menu)
+
+    def _style_menu(self, menu: tk.Menu) -> None:
+        p = self.palette
+        menu.configure(background=p["panel"], foreground=p["text"], activebackground=p["selection"], activeforeground="#ffffff", borderwidth=0)
+        end = menu.index("end")
+        if end is not None:
+            for index in range(end + 1):
+                try:
+                    child = menu.nametowidget(menu.entrycget(index, "menu"))
+                except (tk.TclError, KeyError):
+                    continue
+                if isinstance(child, tk.Menu):
+                    self._style_menu(child)
 
     def _build_menu(self) -> None:
         menu = tk.Menu(self.root)
+        self.menu = menu
 
         file_menu = tk.Menu(menu, tearoff=False)
         file_menu.add_command(label="New", accelerator="Ctrl+N", command=self.new_project)
@@ -130,6 +197,11 @@ class FlipFillApp:
         view_menu.add_command(label="Side", command=self.viewport_side)
         view_menu.add_separator()
         view_menu.add_command(label="Save Viewport PNG…", command=self.save_viewport_png)
+        view_menu.add_separator()
+        appearance_menu = tk.Menu(view_menu, tearoff=False)
+        for label in ("Dark", "Light"):
+            appearance_menu.add_radiobutton(label=label, value=label, variable=self.appearance, command=self._apply_theme)
+        view_menu.add_cascade(label="Appearance", menu=appearance_menu)
         menu.add_cascade(label="View", menu=view_menu)
 
         help_menu = tk.Menu(menu, tearoff=False)
@@ -138,6 +210,7 @@ class FlipFillApp:
         menu.add_cascade(label="Help", menu=help_menu)
 
         self.root.config(menu=menu)
+        self._style_menu(menu)
         self.root.bind("<Control-n>", lambda _: self.new_project())
         self.root.bind("<Control-o>", lambda _: self.open_project())
         self.root.bind("<Control-s>", lambda _: self.save_project())
@@ -149,6 +222,11 @@ class FlipFillApp:
         bar = ttk.Frame(self.root, style="Toolbar.TFrame")
         bar.pack(side=tk.TOP, fill=tk.X)
 
+        brand = ttk.Frame(bar)
+        brand.pack(side=tk.LEFT, padx=(0, 18))
+        ttk.Label(brand, text="FLIPFILL", style="Brand.TLabel").pack(anchor=tk.W)
+        ttk.Label(brand, text="CLEARANCE CAD", style="Muted.TLabel").pack(anchor=tk.W)
+
         buttons: list[tuple[str, Callable[[], None]]] = [
             ("New", self.new_project),
             ("Open", self.open_project),
@@ -157,16 +235,18 @@ class FlipFillApp:
             ("+ Occupant", lambda: self.add_primitive(ObjectRole.OCCUPANT)),
             ("+ Cutout", lambda: self.add_primitive(ObjectRole.CUTOUT)),
             ("+ Additive", lambda: self.add_primitive(ObjectRole.ADDITIVE)),
-            ("Fit Envelope", self.fit_envelope_all),
-            ("Generate", self.generate_model),
-            ("Export STEP", self.export_step),
         ]
         for index, (label, command) in enumerate(buttons):
-            ttk.Button(bar, text=label, command=command).pack(
+            ttk.Button(bar, text=label, command=command, style="Tool.TButton").pack(
                 side=tk.LEFT, padx=(0 if index == 0 else 4, 0)
             )
 
         ttk.Separator(bar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=8)
+        ttk.Button(bar, text="Fit Envelope", command=self.fit_envelope_all, style="Tool.TButton").pack(side=tk.LEFT, padx=2)
+        ttk.Button(bar, text="Generate  F5", command=self.generate_model, style="Accent.TButton").pack(side=tk.LEFT, padx=4)
+        ttk.Button(bar, text="Export", command=self.export_step, style="Tool.TButton").pack(side=tk.LEFT, padx=2)
+        views = ttk.Frame(bar)
+        views.pack(side=tk.RIGHT)
         for label, command in [
             ("Iso", self.viewport_isometric),
             ("Top", self.viewport_top),
@@ -174,24 +254,25 @@ class FlipFillApp:
             ("Side", self.viewport_side),
             ("Fit View", self._fit_camera),
         ]:
-            ttk.Button(bar, text=label, width=7, command=command).pack(side=tk.LEFT, padx=2)
+            ttk.Button(views, text=label, width=7, command=command, style="Tool.TButton").pack(side=tk.LEFT, padx=2)
 
     def _build_workspace(self) -> None:
         pane = tk.PanedWindow(
             self.root,
             orient=tk.HORIZONTAL,
             sashwidth=6,
-            bg="#2b2f36",
+            bg=self.palette["border"],
             showhandle=False,
         )
+        self.pane = pane
         pane.pack(fill=tk.BOTH, expand=True)
 
-        left = ttk.Frame(pane, padding=6)
+        left = ttk.Frame(pane, padding=10)
         center = ttk.Frame(pane)
-        right = ttk.Frame(pane, padding=6)
-        pane.add(left, minsize=240, width=290)
+        right = ttk.Frame(pane, padding=10)
+        pane.add(left, minsize=250, width=300)
         pane.add(center, minsize=500, stretch="always")
-        pane.add(right, minsize=315, width=365)
+        pane.add(right, minsize=330, width=380)
 
         self._build_scene_panel(left)
         self.viewport = CadViewport(center, on_select=self._viewport_selected)
@@ -478,10 +559,11 @@ class FlipFillApp:
 
     def _build_statusbar(self) -> None:
         self.status = tk.StringVar(value="Ready")
-        frame = ttk.Frame(self.root, padding=(6, 3))
+        frame = ttk.Frame(self.root, style="Status.TFrame")
         frame.pack(side=tk.BOTTOM, fill=tk.X)
+        ttk.Label(frame, text="●", foreground="#43d17b").pack(side=tk.LEFT, padx=(0, 6))
         ttk.Label(frame, textvariable=self.status).pack(side=tk.LEFT)
-        self.project_label = ttk.Label(frame, text="")
+        self.project_label = ttk.Label(frame, text="", style="Muted.TLabel")
         self.project_label.pack(side=tk.RIGHT)
 
     # ------------------------------------------------------------------

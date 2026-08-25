@@ -51,6 +51,26 @@ class CadViewport(tk.Frame):
             cursor="fleur",
         )
         self.canvas.pack(fill=tk.BOTH, expand=True)
+        self.view_badge = tk.Label(
+            self.canvas,
+            text="PERSPECTIVE  •  mm",
+            background="#20242b",
+            foreground="#aab2bf",
+            font=("Segoe UI Semibold", 8),
+            padx=10,
+            pady=6,
+        )
+        self.view_badge.place(x=14, y=14)
+        self.navigation_hint = tk.Label(
+            self.canvas,
+            text="LMB Orbit   •   Shift+LMB Pan   •   Wheel Zoom   •   Double-click Fit",
+            background="#20242b",
+            foreground="#8993a2",
+            font=("Segoe UI", 8),
+            padx=10,
+            pady=6,
+        )
+        self.navigation_hint.place(relx=0.5, rely=1.0, y=-14, anchor=tk.S)
         self.canvas.bind("<Configure>", self._on_resize)
         self.canvas.bind("<ButtonPress-1>", self._left_press)
         self.canvas.bind("<B1-Motion>", self._left_drag)
@@ -67,6 +87,17 @@ class CadViewport(tk.Frame):
         self.canvas.bind("<Double-Button-1>", lambda event: self.fit_camera())
 
         self.scene = SceneRenderer(width=900, height=700)
+
+    def set_theme(self, dark: bool) -> None:
+        """Match viewport chrome to the application theme.
+
+        The 3D world intentionally remains dark in both modes, like most CAD
+        workstations, so silhouettes and role colors stay consistent.
+        """
+        background = "#20242b" if dark else "#eef1f5"
+        foreground = "#aab2bf" if dark else "#596273"
+        self.view_badge.configure(background=background, foreground=foreground)
+        self.navigation_hint.configure(background=background, foreground=foreground)
 
     # ------------------------------------------------------------------
     # Scene building
@@ -209,18 +240,22 @@ class CadViewport(tk.Frame):
 
     def camera_isometric(self) -> None:
         self.scene.camera_isometric()
+        self.view_badge.configure(text="ISOMETRIC  •  mm")
         self.request_render()
 
     def camera_top(self) -> None:
         self.scene.camera_top()
+        self.view_badge.configure(text="TOP  •  mm")
         self.request_render()
 
     def camera_front(self) -> None:
         self.scene.camera_front()
+        self.view_badge.configure(text="FRONT  •  mm")
         self.request_render()
 
     def camera_side(self) -> None:
         self.scene.camera_side()
+        self.view_badge.configure(text="RIGHT  •  mm")
         self.request_render()
 
     # ------------------------------------------------------------------
