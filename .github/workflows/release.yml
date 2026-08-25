@@ -46,7 +46,7 @@ jobs:
           else
             tar -czf "../FlipFillCAD-${{ github.ref_name }}-linux.tar.gz" FlipFillCAD
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: flipfill-cad-${{ runner.os }}-archive
           path: FlipFillCAD-${{ github.ref_name }}-*
