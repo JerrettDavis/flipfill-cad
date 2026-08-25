@@ -68,7 +68,7 @@ FlipFill produces a strong starting BRep. Detailed seams, snaps, bosses, gaskets
 - Four scene roles.
 - Primitive blockers/additives.
 - Rounded-box envelope and auto-fit.
-- Exact, offset, and AABB clearance.
+- Exact, offset, AABB, and OBB clearance.
 - Inverse-fill Boolean generation.
 - Validation and collision reporting.
 - Planar split.
