@@ -38,6 +38,40 @@ ENVELOPE_ID = "__envelope__"
 RESULT_ID = "__result__"
 
 
+def _flat_state_map(hover: str, pressed: str) -> list[tuple[str, str]]:
+    """ttk state map for a flat control: only hover/pressed deviate from the base color."""
+    return [("pressed", pressed), ("active", hover)]
+
+
+def _apply_windows_dark_titlebar(root: tk.Tk, dark: bool) -> None:
+    """Ask the DWM to render the native title bar in dark mode on Windows.
+
+    Silently does nothing on other platforms or older Windows builds that
+    don't support the attribute - the OS just keeps its default chrome.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        root.update_idletasks()
+        hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
+        value = ctypes.c_int(1 if dark else 0)
+        for attribute in (20, 19):  # DWMWA_USE_IMMERSIVE_DARK_MODE (current, pre-20H1)
+            result = ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value)
+            )
+            if result == 0:
+                break
+        # The DWM only repaints the caption on its own when the window is
+        # resized/moved - force it immediately so toggling themes at runtime
+        # doesn't leave a stale (wrong-mode) title bar until the next drag.
+        SWP_FLAGS = 0x0001 | 0x0002 | 0x0004 | 0x0020  # NOSIZE|NOMOVE|NOZORDER|FRAMECHANGED
+        ctypes.windll.user32.SetWindowPos(hwnd, None, 0, 0, 0, 0, SWP_FLAGS)
+    except (OSError, AttributeError):
+        pass
+
+
 class FlipFillApp:
     def __init__(self, root: tk.Tk, initial_project: str | None = None) -> None:
         self.root = root
@@ -108,11 +142,60 @@ class FlipFillApp:
         }
         self.palette = p
         self.root.configure(background=p["bg"])
+        _apply_windows_dark_titlebar(self.root, dark)
         style = ttk.Style(self.root)
         style.configure(".", background=p["panel"], foreground=p["text"], font=("Segoe UI", 9))
         style.configure("TFrame", background=p["panel"])
         style.configure("Card.TFrame", background=p["panel_2"])
         style.configure("Toolbar.TFrame", background=p["panel_2"], padding=(14, 9))
+        style.configure("MenuBar.TFrame", background=p["panel_2"], padding=(4, 3))
+        style.configure(
+            "MenuBar.TMenubutton",
+            background=p["panel_2"],
+            foreground=p["text"],
+            bordercolor=p["panel_2"],
+            lightcolor=p["panel_2"],
+            darkcolor=p["panel_2"],
+            padding=(8, 3),
+            relief="flat",
+        )
+        style.map(
+            "MenuBar.TMenubutton",
+            background=_flat_state_map(p["hover"], p["hover"]),
+            bordercolor=_flat_state_map(p["hover"], p["hover"]),
+            lightcolor=_flat_state_map(p["hover"], p["hover"]),
+            darkcolor=_flat_state_map(p["hover"], p["hover"]),
+        )
+        style.layout(
+            "MenuBar.TMenubutton",
+            [
+                (
+                    "Menubutton.border",
+                    {
+                        "sticky": "nswe",
+                        "children": [
+                            (
+                                "Menubutton.focus",
+                                {
+                                    "sticky": "nswe",
+                                    "children": [
+                                        (
+                                            "Menubutton.padding",
+                                            {
+                                                "sticky": "we",
+                                                "children": [
+                                                    ("Menubutton.label", {"side": "left", "sticky": ""})
+                                                ],
+                                            },
+                                        )
+                                    ],
+                                },
+                            )
+                        ],
+                    },
+                )
+            ],
+        )
         style.configure("Status.TFrame", background=p["panel_2"], padding=(12, 6))
         style.configure("TLabel", background=p["panel"], foreground=p["text"])
         style.configure("Toolbar.TLabel", background=p["panel_2"], foreground=p["text"])
@@ -135,49 +218,100 @@ class FlipFillApp:
             padding=(10, 6),
             background=p["panel_3"],
             foreground=p["text"],
+            bordercolor=p["panel_3"],
+            lightcolor=p["panel_3"],
+            darkcolor=p["panel_3"],
             borderwidth=0,
             focusthickness=0,
+            focuscolor=p["panel_3"],
             relief="flat",
         )
         style.map(
             "TButton",
-            background=[("pressed", p["accent_active"]), ("active", p["hover"])],
+            background=_flat_state_map(p["hover"], p["accent_active"]),
+            bordercolor=_flat_state_map(p["hover"], p["accent_active"]),
+            lightcolor=_flat_state_map(p["hover"], p["accent_active"]),
+            darkcolor=_flat_state_map(p["hover"], p["accent_active"]),
             foreground=[("disabled", p["muted"])],
         )
         style.configure(
             "Accent.TButton",
             background=p["accent"],
             foreground="#ffffff",
+            bordercolor=p["accent"],
+            lightcolor=p["accent"],
+            darkcolor=p["accent"],
+            focuscolor=p["accent"],
             font=("Segoe UI Semibold", 9),
             padding=(14, 7),
         )
-        style.map("Accent.TButton", background=[("active", p["accent_active"]), ("pressed", p["accent_active"])])
-        style.configure("Tool.TButton", padding=(8, 5), background=p["panel_2"])
-        style.map("Tool.TButton", background=[("pressed", p["accent_active"]), ("active", p["hover"])])
-        style.configure("View.TButton", padding=(6, 5), background=p["panel_2"])
-        style.map("View.TButton", background=[("pressed", p["accent_active"]), ("active", p["hover"])])
+        style.map(
+            "Accent.TButton",
+            background=_flat_state_map(p["accent_active"], p["accent_active"]),
+            bordercolor=_flat_state_map(p["accent_active"], p["accent_active"]),
+            lightcolor=_flat_state_map(p["accent_active"], p["accent_active"]),
+            darkcolor=_flat_state_map(p["accent_active"], p["accent_active"]),
+        )
+        style.configure(
+            "Tool.TButton",
+            padding=(8, 5),
+            background=p["panel_2"],
+            bordercolor=p["panel_2"],
+            lightcolor=p["panel_2"],
+            darkcolor=p["panel_2"],
+            focuscolor=p["panel_2"],
+        )
+        style.map(
+            "Tool.TButton",
+            background=_flat_state_map(p["hover"], p["accent_active"]),
+            bordercolor=_flat_state_map(p["hover"], p["accent_active"]),
+            lightcolor=_flat_state_map(p["hover"], p["accent_active"]),
+            darkcolor=_flat_state_map(p["hover"], p["accent_active"]),
+        )
+        style.configure(
+            "View.TButton",
+            padding=(6, 5),
+            background=p["panel_2"],
+            bordercolor=p["panel_2"],
+            lightcolor=p["panel_2"],
+            darkcolor=p["panel_2"],
+            focuscolor=p["panel_2"],
+        )
+        style.map(
+            "View.TButton",
+            background=_flat_state_map(p["hover"], p["accent_active"]),
+            bordercolor=_flat_state_map(p["hover"], p["accent_active"]),
+            lightcolor=_flat_state_map(p["hover"], p["accent_active"]),
+            darkcolor=_flat_state_map(p["hover"], p["accent_active"]),
+        )
         style.configure(
             "TEntry",
             fieldbackground=p["field"],
             foreground=p["text"],
             insertcolor=p["text"],
-            bordercolor=p["border"],
-            lightcolor=p["border"],
-            darkcolor=p["border"],
+            bordercolor=p["field"],
+            lightcolor=p["field"],
+            darkcolor=p["field"],
             padding=6,
             borderwidth=1,
             relief="flat",
         )
-        style.map("TEntry", bordercolor=[("focus", p["accent"])])
+        style.map(
+            "TEntry",
+            bordercolor=[("focus", p["accent"]), ("!focus", p["field"])],
+            lightcolor=[("focus", p["accent"]), ("!focus", p["field"])],
+            darkcolor=[("focus", p["accent"]), ("!focus", p["field"])],
+            fieldbackground=[("focus", p["field"])],
+        )
         style.configure(
             "TCombobox",
             fieldbackground=p["field"],
             background=p["field"],
             foreground=p["text"],
             arrowcolor=p["muted"],
-            bordercolor=p["border"],
-            lightcolor=p["border"],
-            darkcolor=p["border"],
+            bordercolor=p["field"],
+            lightcolor=p["field"],
+            darkcolor=p["field"],
             padding=5,
             relief="flat",
         )
@@ -185,18 +319,35 @@ class FlipFillApp:
             "TCombobox",
             fieldbackground=[("readonly", p["field"])],
             foreground=[("readonly", p["text"])],
-            bordercolor=[("focus", p["accent"])],
+            background=[("readonly", p["field"])],
+            bordercolor=[("focus", p["accent"]), ("!focus", p["field"])],
+            lightcolor=[("focus", p["accent"]), ("!focus", p["field"])],
+            darkcolor=[("focus", p["accent"]), ("!focus", p["field"])],
+            arrowcolor=[("hover", p["accent"]), ("!hover", p["muted"])],
         )
         style.configure(
-            "TCheckbutton", background=p["panel"], foreground=p["text"], focuscolor=p["panel"]
+            "TCheckbutton",
+            background=p["panel"],
+            foreground=p["text"],
+            focuscolor=p["panel"],
+            indicatorbackground=p["field"],
+            indicatorforeground=p["field"],
+            indicatormargin=(0, 0, 6, 0),
         )
-        style.map("TCheckbutton", background=[("active", p["panel"])])
+        style.map(
+            "TCheckbutton",
+            background=[("active", p["panel"])],
+            indicatorbackground=[("selected", p["accent"]), ("!selected", p["field"])],
+            indicatorforeground=[("selected", p["accent"]), ("!selected", p["field"])],
+        )
         style.configure(
             "Treeview",
             background=p["panel"],
             fieldbackground=p["panel"],
             foreground=p["text"],
             bordercolor=p["panel"],
+            lightcolor=p["panel"],
+            darkcolor=p["panel"],
             borderwidth=0,
             relief="flat",
             rowheight=27,
@@ -216,7 +367,14 @@ class FlipFillApp:
             background=[("selected", p["selection"])],
             foreground=[("selected", "#ffffff" if dark else p["text"])],
         )
-        style.configure("TNotebook", background=p["panel"], bordercolor=p["panel"], borderwidth=0)
+        style.configure(
+            "TNotebook",
+            background=p["panel"],
+            bordercolor=p["panel"],
+            lightcolor=p["panel"],
+            darkcolor=p["panel"],
+            borderwidth=0,
+        )
         style.configure(
             "TNotebook.Tab",
             background=p["panel"],
@@ -279,8 +437,8 @@ class FlipFillApp:
             self.log.tag_configure("success", foreground=p["success"])
         if hasattr(self, "viewport"):
             self.viewport.set_theme(dark)
-        if hasattr(self, "menu"):
-            self._style_menu(self.menu)
+        if hasattr(self, "_menu_bar_items"):
+            self._restyle_menus()
         if hasattr(self, "status_dot"):
             self.status_dot.configure(background=p["panel_2"], foreground=p["success"])
         self._refresh_icon_widgets()
@@ -341,9 +499,21 @@ class FlipFillApp:
                 if isinstance(child, tk.Menu):
                     self._style_menu(child)
 
+    def _restyle_menus(self) -> None:
+        for _label, top_menu in self._menu_bar_items:
+            self._style_menu(top_menu)
+
     def _build_menu(self) -> None:
+        # A plain ttk.Menubutton row instead of root.config(menu=...): Windows
+        # renders the native menu bar with its own light system chrome that
+        # ttk/tk styling cannot reach, which reintroduces exactly the bright
+        # divider this theme is trying to eliminate.
+        bar = ttk.Frame(self.root, style="MenuBar.TFrame")
+        bar.pack(side=tk.TOP, fill=tk.X)
+        self.menu_bar = bar
+        self._menu_bar_items: list[tuple[str, tk.Menu]] = []
+
         menu = tk.Menu(self.root)
-        self.menu = menu
 
         file_menu = tk.Menu(menu, tearoff=False)
         file_menu.add_command(label="New", accelerator="Ctrl+N", command=self.new_project)
@@ -359,7 +529,7 @@ class FlipFillApp:
         file_menu.add_command(label="Export Package…", command=self.export_package)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.on_close)
-        menu.add_cascade(label="File", menu=file_menu)
+        self._menu_bar_items.append(("File", file_menu))
 
         object_menu = tk.Menu(menu, tearoff=False)
         object_menu.add_command(
@@ -377,7 +547,7 @@ class FlipFillApp:
         object_menu.add_separator()
         object_menu.add_command(label="Ground to Z=0", command=self.ground_selected)
         object_menu.add_command(label="Center XY", command=self.center_xy_selected)
-        menu.add_cascade(label="Object", menu=object_menu)
+        self._menu_bar_items.append(("Object", object_menu))
 
         generate_menu = tk.Menu(menu, tearoff=False)
         generate_menu.add_command(label="Fit Envelope to Included Objects", command=self.fit_envelope_all)
@@ -385,7 +555,7 @@ class FlipFillApp:
         generate_menu.add_separator()
         generate_menu.add_command(label="Generate", accelerator="F5", command=self.generate_model)
         generate_menu.add_command(label="Validate", command=self.validate_model)
-        menu.add_cascade(label="Generate", menu=generate_menu)
+        self._menu_bar_items.append(("Generate", generate_menu))
 
         view_menu = tk.Menu(menu, tearoff=False)
         view_menu.add_checkbutton(
@@ -404,15 +574,19 @@ class FlipFillApp:
         for label in ("Dark", "Light"):
             appearance_menu.add_radiobutton(label=label, value=label, variable=self.appearance, command=self._apply_theme)
         view_menu.add_cascade(label="Appearance", menu=appearance_menu)
-        menu.add_cascade(label="View", menu=view_menu)
+        self._menu_bar_items.append(("View", view_menu))
 
         help_menu = tk.Menu(menu, tearoff=False)
         help_menu.add_command(label="Workflow", command=self.show_workflow_help)
         help_menu.add_command(label="About", command=self.show_about)
-        menu.add_cascade(label="Help", menu=help_menu)
+        self._menu_bar_items.append(("Help", help_menu))
 
-        self.root.config(menu=menu)
-        self._style_menu(menu)
+        for index, (label, top_menu) in enumerate(self._menu_bar_items):
+            button = ttk.Menubutton(
+                bar, text=label, menu=top_menu, style="MenuBar.TMenubutton", direction="below"
+            )
+            button.pack(side=tk.LEFT, padx=(10 if index == 0 else 0, 0))
+        self._restyle_menus()
         self.root.bind("<Control-n>", lambda _: self.new_project())
         self.root.bind("<Control-o>", lambda _: self.open_project())
         self.root.bind("<Control-s>", lambda _: self.save_project())
