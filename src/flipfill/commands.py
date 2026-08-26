@@ -25,7 +25,8 @@ from flipfill.model import (
     PrimitiveSpec,
     Project,
     SceneObject,
-    SplitAxis,
+    SliceCutterKind,
+    SliceSpec,
     Transform,
     Vector3,
 )
@@ -369,28 +370,164 @@ def fit_envelope(
 
 
 # ----------------------------------------------------------------------
-# Split
+# Slicing
 # ----------------------------------------------------------------------
 
 
-def configure_split(
+def configure_slicing(
     project: Project,
     enabled: bool | None = None,
-    axis: SplitAxis | None = None,
-    offset: float | None = None,
-    gap: float | None = None,
+    remainder_name: str | None = None,
 ) -> None:
-    split = project.split
+    slicing = project.slicing
     if enabled is not None:
-        split.enabled = enabled
-    if axis is not None:
-        split.axis = axis
-    if offset is not None:
-        split.offset = offset
-    if gap is not None:
-        if gap < 0:
-            raise CommandError("Split gap must be zero or positive")
-        split.gap = gap
+        slicing.enabled = enabled
+    if remainder_name is not None:
+        name = remainder_name.strip()
+        if not name:
+            raise CommandError("Remainder name must not be empty")
+        if any(s.name == name for s in slicing.slices):
+            raise CommandError(
+                f"Remainder name {name!r} collides with an existing slice name"
+            )
+        slicing.remainder_name = name
+
+
+def _validate_slice_name(
+    project: Project, name: str, *, ignore_index: int | None = None
+) -> str:
+    name = name.strip()
+    if not name:
+        raise CommandError("Slice name must not be empty")
+    if name == project.slicing.remainder_name:
+        raise CommandError(f"Slice name {name!r} collides with the remainder name")
+    for index, existing in enumerate(project.slicing.slices):
+        if index == ignore_index:
+            continue
+        if existing.name == name:
+            raise CommandError(f"A slice named {name!r} already exists")
+    return name
+
+
+def add_slice(
+    project: Project,
+    name: str,
+    cutter_kind: SliceCutterKind,
+    transform: Transform | None = None,
+    gap: float = 0.0,
+    object_id: str | None = None,
+    index: int | None = None,
+) -> SliceSpec:
+    validated_name = _validate_slice_name(project, name)
+    if gap < 0:
+        raise CommandError("Slice gap must be zero or positive")
+
+    if cutter_kind is SliceCutterKind.OBJECT:
+        if gap != 0:
+            raise CommandError("Gap only applies to plane cutters")
+        if not object_id:
+            raise CommandError("An object cutter requires an object id or name")
+        resolved_object = find_object(project, object_id)
+        slice_spec = SliceSpec(
+            name=validated_name, cutter_kind=cutter_kind, object_id=resolved_object.id
+        )
+    else:
+        slice_spec = SliceSpec(
+            name=validated_name,
+            cutter_kind=cutter_kind,
+            transform=transform or Transform(),
+            gap=gap,
+        )
+
+    slices = project.slicing.slices
+    if index is None or index >= len(slices):
+        slices.append(slice_spec)
+    else:
+        slices.insert(max(0, index), slice_spec)
+    return slice_spec
+
+
+def _find_slice_index(project: Project, name_or_index: str) -> int:
+    slices = project.slicing.slices
+    try:
+        index = int(name_or_index)
+    except (TypeError, ValueError):
+        index = None
+    if index is not None:
+        if 0 <= index < len(slices):
+            return index
+        raise CommandError(f"No slice at index {index}")
+    for position, slice_spec in enumerate(slices):
+        if slice_spec.name == name_or_index:
+            return position
+    raise CommandError(f"No slice named {name_or_index!r}")
+
+
+def remove_slice(project: Project, name_or_index: str) -> None:
+    index = _find_slice_index(project, name_or_index)
+    del project.slicing.slices[index]
+
+
+def update_slice(
+    project: Project,
+    name_or_index: str,
+    *,
+    name: str | None = None,
+    cutter_kind: SliceCutterKind | None = None,
+    transform: Transform | None = None,
+    gap: float | None = None,
+    object_id: str | None = None,
+) -> SliceSpec:
+    """Replace one slice in place, validating before mutating so a failed
+    edit never removes the original. Any parameter left as None keeps the
+    existing slice's current value for that field."""
+
+    index = _find_slice_index(project, name_or_index)
+    current = project.slicing.slices[index]
+
+    resolved_name = name if name is not None else current.name
+    if resolved_name != current.name:
+        validated_name = _validate_slice_name(project, resolved_name, ignore_index=index)
+    else:
+        validated_name = current.name
+
+    resolved_kind = cutter_kind if cutter_kind is not None else current.cutter_kind
+    resolved_gap = gap if gap is not None else current.gap
+    if resolved_gap < 0:
+        raise CommandError("Slice gap must be zero or positive")
+
+    if resolved_kind is SliceCutterKind.OBJECT:
+        if resolved_gap != 0:
+            raise CommandError("Gap only applies to plane cutters")
+        resolved_object_id = object_id if object_id is not None else current.object_id
+        if not resolved_object_id:
+            raise CommandError("An object cutter requires an object id or name")
+        resolved_object = find_object(project, resolved_object_id)
+        updated = SliceSpec(
+            name=validated_name, cutter_kind=resolved_kind, object_id=resolved_object.id
+        )
+    else:
+        resolved_transform = transform if transform is not None else current.transform
+        updated = SliceSpec(
+            name=validated_name,
+            cutter_kind=resolved_kind,
+            transform=resolved_transform,
+            gap=resolved_gap,
+        )
+
+    project.slicing.slices[index] = updated
+    return updated
+
+
+def reorder_slice(project: Project, name_or_index: str, new_index: int) -> None:
+    slices = project.slicing.slices
+    index = _find_slice_index(project, name_or_index)
+    slice_spec = slices.pop(index)
+    slices.insert(max(0, min(new_index, len(slices))), slice_spec)
+
+
+def list_slices(project: Project) -> list[SliceSpec]:
+    return list(project.slicing.slices)
 
 
 # ----------------------------------------------------------------------

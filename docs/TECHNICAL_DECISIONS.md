@@ -46,6 +46,21 @@ should be revisited (and likely removed) once upstream `cadquery`/OCP wheels
 resolve the underlying shutdown bug. See `docs/ARCHITECTURE.md` for where
 each hook lives.
 
+## ADR-007: Slicing is a breaking replacement for split, not an addition
+
+The 0.1 planar split (`SplitSpec`: enabled/axis/offset/gap, exactly two
+named halves) could not express more than two bodies or a non-axis-aligned
+cut, and real enclosures routinely need three or more (front bezel,
+center support, rear shell). Keeping `SplitSpec` alongside a new general
+mechanism would mean two overlapping body-producing code paths in the
+generator, CLI, and UI to maintain and explain. Since `Project` has no
+schema-migration path yet (`schema_version` hard-rejects anything but
+`1`; see ADR list and `docs/ROADMAP.md`), and the project is pre-1.0,
+`split` was removed outright in favor of `slicing`: an ordered list of
+plane-or-object cuts producing N named bodies. Existing `.flipfill.json`
+files with a `split` key silently lose that setting on load (the key is
+simply not read); there is no automatic migration.
+
 ## Primary technical sources
 
 - CadQuery documentation: https://cadquery.readthedocs.io/

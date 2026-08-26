@@ -2,13 +2,13 @@
 
 The CLI is the primary way to drive FlipFill: every scene edit the desktop
 GUI can make (import, position, classify, add blockers, fit an envelope,
-generate, validate, split, export, render) has a scripted equivalent here,
+generate, validate, slice, export, render) has a scripted equivalent here,
 backed by the same :mod:`flipfill.commands` service layer and
 :mod:`flipfill.geometry` pipeline the GUI uses. Nothing here re-implements
 geometry logic.
 
 Mutating commands (``new``, ``import``, ``move``, ``rotate``, ``align``,
-``role``, ``clearance``, ``blocker``, ``envelope``, ``split``) load a
+``role``, ``clearance``, ``blocker``, ``envelope``, ``slice``) load a
 project, apply one change, and save it back to disk — so they compose in
 shell scripts:
 
@@ -39,7 +39,14 @@ from flipfill.geometry.exporters import (
 )
 from flipfill.geometry.generator import GenerationError, MessageLevel, generate
 from flipfill.geometry.importers import GeometryRepository, ImportGeometryError
-from flipfill.model import ClearanceMode, ObjectRole, PrimitiveKind, SplitAxis, Vector3
+from flipfill.model import (
+    ClearanceMode,
+    ObjectRole,
+    PrimitiveKind,
+    SliceCutterKind,
+    Transform,
+    Vector3,
+)
 from flipfill.project_io import ProjectIoError, load_project, save_project
 
 try:
@@ -100,6 +107,21 @@ def _vector_arg(namespace: argparse.Namespace, prefix: str) -> Vector3 | None:
     if x is None or y is None or z is None:
         _die(f"--{prefix}-x, --{prefix}-y, and --{prefix}-z must be given together")
     return Vector3(x, y, z)
+
+
+def _slugify(name: str) -> str:
+    slug = "".join(c.lower() if c.isalnum() else "_" for c in name).strip("_")
+    return slug or "body"
+
+
+def _unique_slug(name: str, seen: dict[str, int]) -> str:
+    """Slugify ``name``, suffixing later collisions so distinct body names
+    (``Top`` and ``top``) never overwrite each other's exported file."""
+
+    slug = _slugify(name)
+    count = seen.get(slug, 0) + 1
+    seen[slug] = count
+    return slug if count == 1 else f"{slug}_{count}"
 
 
 # ----------------------------------------------------------------------
@@ -394,30 +416,104 @@ def command_envelope(args: argparse.Namespace) -> int:
 
 
 # ----------------------------------------------------------------------
-# split
+# slice
 # ----------------------------------------------------------------------
 
 
-def command_split(args: argparse.Namespace) -> int:
+def _slice_to_dict(project, slice_spec) -> dict[str, Any]:
+    data = slice_spec.to_dict()
+    if slice_spec.object_id:
+        target = project.object_by_id(slice_spec.object_id)
+        data["object_name"] = target.name if target else None
+    return data
+
+
+def command_slice_add(args: argparse.Namespace) -> int:
     project = _load(args.project)
-    enabled = True if args.enable else (False if args.disable else None)
+    cutter_kind = SliceCutterKind.OBJECT if args.object_ref else SliceCutterKind.PLANE
+    transform = None
+    if cutter_kind is SliceCutterKind.PLANE:
+        transform = Transform(
+            translation=Vector3(args.at_x, args.at_y, args.at_z),
+            rotation_deg=Vector3(args.rotate_x, args.rotate_y, args.rotate_z),
+        )
     try:
-        commands.configure_split(
+        slice_spec = commands.add_slice(
             project,
-            enabled=enabled,
-            axis=SplitAxis(args.axis) if args.axis else None,
-            offset=args.offset,
+            name=args.name,
+            cutter_kind=cutter_kind,
+            transform=transform,
             gap=args.gap,
+            object_id=args.object_ref,
+            index=args.index,
         )
     except CommandError as exc:
         _die(str(exc))
     _save(project, args.project)
-    split = project.split
     _emit(
         args,
-        {"ok": True, "split": split.to_dict()},
-        f"Split: enabled={split.enabled} axis={split.axis.value} "
-        f"offset={split.offset} gap={split.gap}",
+        {"ok": True, "slice": _slice_to_dict(project, slice_spec)},
+        f"Added slice '{slice_spec.name}' ({slice_spec.cutter_kind.value})",
+    )
+    return 0
+
+
+def command_slice_remove(args: argparse.Namespace) -> int:
+    project = _load(args.project)
+    try:
+        commands.remove_slice(project, args.slice)
+    except CommandError as exc:
+        _die(str(exc))
+    _save(project, args.project)
+    _emit(args, {"ok": True}, f"Removed slice {args.slice!r}")
+    return 0
+
+
+def command_slice_move(args: argparse.Namespace) -> int:
+    project = _load(args.project)
+    try:
+        commands.reorder_slice(project, args.slice, args.to_index)
+    except CommandError as exc:
+        _die(str(exc))
+    _save(project, args.project)
+    _emit(args, {"ok": True}, f"Moved slice {args.slice!r} to index {args.to_index}")
+    return 0
+
+
+def command_slice_list(args: argparse.Namespace) -> int:
+    project = _load(args.project)
+    slices = commands.list_slices(project)
+    payload = [_slice_to_dict(project, s) for s in slices]
+    lines = [f"{i}: {s.name} ({s.cutter_kind.value})" for i, s in enumerate(slices)] or [
+        "(no slices configured)"
+    ]
+    _emit(args, {"ok": True, "slices": payload}, "\n".join(lines))
+    return 0
+
+
+def command_slice_enable(args: argparse.Namespace) -> int:
+    project = _load(args.project)
+    commands.configure_slicing(project, enabled=args.enabled)
+    _save(project, args.project)
+    _emit(
+        args,
+        {"ok": True, "enabled": project.slicing.enabled},
+        f"Slicing {'enabled' if args.enabled else 'disabled'}",
+    )
+    return 0
+
+
+def command_slice_remainder_name(args: argparse.Namespace) -> int:
+    project = _load(args.project)
+    try:
+        commands.configure_slicing(project, remainder_name=args.name)
+    except CommandError as exc:
+        _die(str(exc))
+    _save(project, args.project)
+    _emit(
+        args,
+        {"ok": True, "remainder_name": project.slicing.remainder_name},
+        f"Remainder name set to {args.name!r}",
     )
     return 0
 
@@ -469,16 +565,19 @@ def command_generate(args: argparse.Namespace) -> int:
         if not getattr(args, "json", False):
             print(f"Exported fit-check assembly: {assembly}")
 
-    if project.split.enabled and generated.split_a is not None and generated.split_b is not None:
-        split_dir = Path(args.split_dir or Path(args.output).parent).resolve()
-        split_dir.mkdir(parents=True, exist_ok=True)
+    if project.slicing.enabled and generated.sliced_bodies:
+        slice_dir = Path(args.slice_dir or Path(args.output).parent).resolve()
+        slice_dir.mkdir(parents=True, exist_ok=True)
         stem = Path(args.output).stem
-        first = export_shape(generated.split_a, split_dir / f"{stem}_A.step")
-        second = export_shape(generated.split_b, split_dir / f"{stem}_B.step")
-        outputs["split_a"] = str(first)
-        outputs["split_b"] = str(second)
+        slice_outputs: dict[str, str] = {}
+        seen_slugs: dict[str, int] = {}
+        for name, shape in generated.sliced_bodies.items():
+            slug = _unique_slug(name, seen_slugs)
+            exported = export_shape(shape, slice_dir / f"{stem}_{slug}.step")
+            slice_outputs[name] = str(exported)
+        outputs["slices"] = slice_outputs
         if not getattr(args, "json", False):
-            print(f"Exported split halves: {first}, {second}")
+            print("Exported sliced bodies: " + ", ".join(slice_outputs.values()))
 
     if getattr(args, "json", False):
         print(
@@ -563,12 +662,11 @@ def command_export(args: argparse.Namespace) -> int:
                     )
                 ),
             }
-            if generated.split_a is not None and generated.split_b is not None:
-                written["split_a"] = str(
-                    export_shape(generated.split_a, output_dir / f"{stem}_A.step")
-                )
-                written["split_b"] = str(
-                    export_shape(generated.split_b, output_dir / f"{stem}_B.step")
+            seen_slugs: dict[str, int] = {}
+            for name, shape in generated.sliced_bodies.items():
+                slug = _unique_slug(name, seen_slugs)
+                written[f"slice:{name}"] = str(
+                    export_shape(shape, output_dir / f"{stem}_{slug}.step")
                 )
             save_project(project, output_dir / f"{stem}.flipfill.json")
             written["project"] = str(output_dir / f"{stem}.flipfill.json")
@@ -841,17 +939,58 @@ def build_parser() -> argparse.ArgumentParser:
     _add_json_flag(envelope)
     envelope.set_defaults(handler=command_envelope)
 
-    # split
-    split = subparsers.add_parser("split", help="Configure the planar split")
-    split.add_argument("project")
-    group = split.add_mutually_exclusive_group()
-    group.add_argument("--enable", action="store_true")
-    group.add_argument("--disable", action="store_true")
-    split.add_argument("--axis", choices=[a.value for a in SplitAxis])
-    split.add_argument("--offset", type=float)
-    split.add_argument("--gap", type=float)
-    _add_json_flag(split)
-    split.set_defaults(handler=command_split)
+    # slice
+    slice_parser = subparsers.add_parser("slice", help="Manage the ordered slice/cut list")
+    slice_parser.add_argument("project")
+    slice_sub = slice_parser.add_subparsers(dest="slice_command", required=True)
+
+    slice_add = slice_sub.add_parser("add", help="Add a plane or object cutter slice")
+    slice_add.add_argument("--name", required=True)
+    cutter_group = slice_add.add_mutually_exclusive_group(required=True)
+    cutter_group.add_argument("--plane", action="store_true")
+    cutter_group.add_argument(
+        "--object", dest="object_ref", help="Object id or name to use as the cutting solid"
+    )
+    slice_add.add_argument("--at-x", type=float, dest="at_x", default=0.0)
+    slice_add.add_argument("--at-y", type=float, dest="at_y", default=0.0)
+    slice_add.add_argument("--at-z", type=float, dest="at_z", default=0.0)
+    slice_add.add_argument("--rotate-x", type=float, dest="rotate_x", default=0.0)
+    slice_add.add_argument("--rotate-y", type=float, dest="rotate_y", default=0.0)
+    slice_add.add_argument("--rotate-z", type=float, dest="rotate_z", default=0.0)
+    slice_add.add_argument("--gap", type=float, default=0.0)
+    slice_add.add_argument("--index", type=int, help="Insert position (default: append)")
+    _add_json_flag(slice_add)
+    slice_add.set_defaults(handler=command_slice_add)
+
+    slice_remove = slice_sub.add_parser("remove", help="Remove a slice by name or index")
+    slice_remove.add_argument("slice", help="Slice name or index")
+    _add_json_flag(slice_remove)
+    slice_remove.set_defaults(handler=command_slice_remove)
+
+    slice_move = slice_sub.add_parser("move", help="Reorder a slice")
+    slice_move.add_argument("slice", help="Slice name or index")
+    slice_move.add_argument("--to", type=int, required=True, dest="to_index")
+    _add_json_flag(slice_move)
+    slice_move.set_defaults(handler=command_slice_move)
+
+    slice_list = slice_sub.add_parser("list", help="List configured slices")
+    _add_json_flag(slice_list)
+    slice_list.set_defaults(handler=command_slice_list)
+
+    slice_enable = slice_sub.add_parser("enable", help="Enable slicing")
+    _add_json_flag(slice_enable)
+    slice_enable.set_defaults(handler=command_slice_enable, enabled=True)
+
+    slice_disable = slice_sub.add_parser("disable", help="Disable slicing")
+    _add_json_flag(slice_disable)
+    slice_disable.set_defaults(handler=command_slice_enable, enabled=False)
+
+    slice_remainder = slice_sub.add_parser(
+        "remainder-name", help="Set the name of the final (unsliced) piece"
+    )
+    slice_remainder.add_argument("name")
+    _add_json_flag(slice_remainder)
+    slice_remainder.set_defaults(handler=command_slice_remainder_name)
 
     # generate
     generate_parser = subparsers.add_parser(
@@ -860,7 +999,7 @@ def build_parser() -> argparse.ArgumentParser:
     generate_parser.add_argument("project")
     generate_parser.add_argument("--output", "-o", required=True)
     generate_parser.add_argument("--fitcheck")
-    generate_parser.add_argument("--split-dir")
+    generate_parser.add_argument("--slice-dir")
     generate_parser.add_argument("--force", action="store_true")
     _add_json_flag(generate_parser)
     generate_parser.set_defaults(handler=command_generate)

@@ -11,6 +11,7 @@ from flipfill.geometry.importers import GeometryRepository, ResolvedGeometry
 from flipfill.geometry.offsets import OffsetError, offset_shape
 from flipfill.geometry.primitives import make_aabb, make_primitive
 from flipfill.geometry.tessellation import tessellate_shape
+from flipfill.geometry.transforms import transform_shape
 from flipfill.model import (
     ClearanceMode,
     ObjectRole,
@@ -18,7 +19,9 @@ from flipfill.model import (
     PrimitiveSpec,
     Project,
     SceneObject,
-    SplitAxis,
+    SliceCutterKind,
+    SliceSpec,
+    SlicingSpec,
     Transform,
     Vector3,
 )
@@ -53,8 +56,7 @@ class GenerationResult:
     cutout_shapes: list[cq.Shape]
     additive_shapes: list[cq.Shape]
     messages: list[GenerationMessage] = field(default_factory=list)
-    split_a: cq.Shape | None = None
-    split_b: cq.Shape | None = None
+    sliced_bodies: dict[str, cq.Shape] = field(default_factory=dict)
 
     @property
     def errors(self) -> list[GenerationMessage]:
@@ -185,22 +187,33 @@ def _subtractive_shape(
         return _aabb_clearance(resolved, scene_object.clearance_mm)
 
 
+def _owner_label(owner: SceneObject | SliceSpec) -> str:
+    if isinstance(owner, SceneObject):
+        return f"'{owner.name}' ({owner.role.value})"
+    return f"slice '{owner.name}'"
+
+
+def _owner_id(owner: SceneObject | SliceSpec) -> str | None:
+    return owner.id if isinstance(owner, SceneObject) else None
+
+
 def _boolean_step(
     op: str,
     result: cq.Shape,
     shape: cq.Shape,
-    scene_object: SceneObject,
+    owner: SceneObject | SliceSpec,
     tolerance: float,
     messages: list[GenerationMessage],
 ) -> cq.Shape:
-    """Apply one fuse/cut step, retrying once after a topology cleanup pass.
+    """Apply one fuse/cut/intersect step, retrying once after a topology
+    cleanup pass.
 
     OCCT Booleans can fail on otherwise-valid inputs because of small
     numerical artifacts (sliver faces, duplicate edges) in one operand.
     Retrying with both sides ``.clean()``-ed first recovers a real fraction
     of those failures; when it doesn't, the resulting error names the
-    specific object responsible instead of a generic "Boolean generation
-    failed", so a user knows what to fix.
+    specific object/slice responsible instead of a generic "Boolean
+    generation failed", so a user knows what to fix.
     """
 
     method = getattr(result, op)
@@ -213,15 +226,14 @@ def _boolean_step(
             recovered = getattr(cleaned_result, op)(cleaned_shape, tol=tolerance)
         except Exception as exc:
             raise GenerationError(
-                f"{op.capitalize()} failed while combining '{scene_object.name}' "
-                f"({scene_object.role.value}): {exc}"
+                f"{op.capitalize()} failed while combining {_owner_label(owner)}: {exc}"
             ) from exc
         messages.append(
             GenerationMessage(
                 MessageLevel.WARNING,
-                f"{op.capitalize()} with '{scene_object.name}' needed a topology cleanup "
+                f"{op.capitalize()} with {_owner_label(owner)} needed a topology cleanup "
                 f"pass to succeed ({first_exc}); the result may warrant a closer look.",
-                scene_object.id,
+                _owner_id(owner),
             )
         )
         return recovered
@@ -249,6 +261,93 @@ def _cut_many(
     for shape, scene_object in shapes:
         result = _boolean_step("cut", result, shape, scene_object, tolerance, messages)
     return result.clean()
+
+
+def _local_box(size_x: float, size_y: float, z_min: float, z_max: float) -> cq.Shape:
+    """A box spanning [-size_x/2, size_x/2] x [-size_y/2, size_y/2] x
+    [z_min, z_max] in local coordinates, ready to be positioned by a
+    Transform via transform_shape -- used to build a knife whose local
+    z=0 plane is the cutter's own plane, before it is rotated/translated
+    into world space."""
+    size_z = z_max - z_min
+    box = cq.Workplane("XY").box(size_x, size_y, size_z, centered=True).val()
+    return box.translate((0.0, 0.0, (z_min + z_max) / 2.0))
+
+
+def _plane_knives(
+    transform: Transform, gap: float, bounds: Bounds3D
+) -> tuple[cq.Shape, cq.Shape]:
+    """Two knife solids for one plane cut: the first isolates the piece
+    carved off (local -Z side), the second is what gets removed from the
+    remainder going forward. They differ only when ``gap`` (kerf) is
+    nonzero, matching the ``low_plane``/``high_plane`` split of the
+    now-removed ``split_shape``, generalized from a world axis to an
+    arbitrary oriented plane."""
+
+    # The knife is built around the plane's own origin, so padding by the body
+    # size alone misses a body whose center sits far from that origin (routine
+    # once fit_envelope_to_objects moves the envelope onto imported hardware).
+    to_center = bounds.center - transform.translation
+    span = max(abs(to_center.x), abs(to_center.y), abs(to_center.z))
+    padding = max(bounds.size.x, bounds.size.y, bounds.size.z, 1.0) + span + 10.0
+    half_gap = max(0.0, gap) / 2.0
+    size_xy = 2.0 * padding
+    piece_knife = _local_box(size_xy, size_xy, -padding, -half_gap)
+    remainder_knife = _local_box(size_xy, size_xy, -padding, half_gap)
+    return transform_shape(piece_knife, transform), transform_shape(remainder_knife, transform)
+
+
+def _object_knife(
+    slice_spec: SliceSpec, repository: GeometryRepository, project: Project
+) -> cq.Shape:
+    if not slice_spec.object_id:
+        raise GenerationError(f"Slice '{slice_spec.name}' has no object reference")
+    scene_object = project.object_by_id(slice_spec.object_id)
+    if scene_object is None:
+        raise GenerationError(
+            f"Slice '{slice_spec.name}' references a missing object id "
+            f"{slice_spec.object_id!r}"
+        )
+    resolved = repository.resolve(scene_object)
+    if resolved.brep is None:
+        raise GenerationError(
+            f"Slice '{slice_spec.name}' references '{scene_object.name}', which has no "
+            "BRep geometry; mesh-only objects cannot be used as a cutting tool."
+        )
+    return resolved.brep
+
+
+def slice_result(
+    result: cq.Shape,
+    slicing: SlicingSpec,
+    repository: GeometryRepository,
+    project: Project,
+    tolerance: float,
+    messages: list[GenerationMessage],
+) -> dict[str, cq.Shape]:
+    bodies: dict[str, cq.Shape] = {}
+    remainder = result
+    bounds = bounds_from_shape(result)
+    for slice_spec in slicing.slices:
+        if slice_spec.cutter_kind is SliceCutterKind.PLANE:
+            piece_knife, remainder_knife = _plane_knives(
+                slice_spec.transform, slice_spec.gap, bounds
+            )
+        else:
+            piece_knife = remainder_knife = _object_knife(slice_spec, repository, project)
+        piece = _boolean_step(
+            "intersect", remainder, piece_knife, slice_spec, tolerance, messages
+        )
+        remainder = _boolean_step(
+            "cut", remainder, remainder_knife, slice_spec, tolerance, messages
+        )
+        if piece.isNull() or piece.Volume() <= tolerance:
+            raise GenerationError(f"Slice '{slice_spec.name}' produced an empty body")
+        bodies[slice_spec.name] = piece.clean()
+    if remainder.isNull() or remainder.Volume() <= tolerance:
+        raise GenerationError("Slicing consumed the entire body; the remainder is empty")
+    bodies[slicing.remainder_name] = remainder.clean()
+    return bodies
 
 
 def generate(project: Project, repository: GeometryRepository | None = None) -> GenerationResult:
@@ -327,19 +426,15 @@ def generate(project: Project, repository: GeometryRepository | None = None) -> 
 
     generated.messages.extend(validate_generation(project, generated))
 
-    if project.split.enabled:
-        try:
-            generated.split_a, generated.split_b = split_shape(
-                generated.result,
-                project.split.axis,
-                project.split.offset,
-                project.split.gap,
-                project.boolean_tolerance,
-            )
-        except Exception as exc:
-            generated.messages.append(
-                GenerationMessage(MessageLevel.ERROR, f"Split operation failed: {exc}")
-            )
+    if project.slicing.enabled:
+        generated.sliced_bodies = slice_result(
+            generated.result,
+            project.slicing,
+            repository,
+            project,
+            project.boolean_tolerance,
+            generated.messages,
+        )
 
     return generated
 
@@ -455,52 +550,3 @@ def validate_generation(
             pass
 
     return messages
-
-
-def split_shape(
-    shape: cq.Shape,
-    axis: SplitAxis,
-    offset: float,
-    gap: float = 0.0,
-    tolerance: float = 1.0e-4,
-) -> tuple[cq.Shape, cq.Shape]:
-    bounds = bounds_from_shape(shape)
-    low_plane = offset - max(0.0, gap) / 2.0
-    high_plane = offset + max(0.0, gap) / 2.0
-    padding = max(bounds.size.x, bounds.size.y, bounds.size.z, 1.0) + 10.0
-
-    mins = [bounds.minimum.x - padding, bounds.minimum.y - padding, bounds.minimum.z - padding]
-    maxs = [bounds.maximum.x + padding, bounds.maximum.y + padding, bounds.maximum.z + padding]
-    axis_index = {SplitAxis.X: 0, SplitAxis.Y: 1, SplitAxis.Z: 2}[axis]
-
-    if not mins[axis_index] < low_plane < maxs[axis_index]:
-        raise GenerationError("Lower split plane lies outside the generated body bounds")
-    if not mins[axis_index] < high_plane < maxs[axis_index]:
-        raise GenerationError("Upper split plane lies outside the generated body bounds")
-
-    low_min = mins.copy()
-    low_max = maxs.copy()
-    low_max[axis_index] = low_plane
-
-    high_min = mins.copy()
-    high_min[axis_index] = high_plane
-    high_max = maxs.copy()
-
-    def clipping_box(minimum: list[float], maximum: list[float]) -> cq.Shape:
-        size = Vector3(
-            maximum[0] - minimum[0],
-            maximum[1] - minimum[1],
-            maximum[2] - minimum[2],
-        )
-        center = Vector3(
-            (minimum[0] + maximum[0]) / 2.0,
-            (minimum[1] + maximum[1]) / 2.0,
-            (minimum[2] + maximum[2]) / 2.0,
-        )
-        return make_aabb(size, center)
-
-    low = shape.intersect(clipping_box(low_min, low_max), tol=tolerance).clean()
-    high = shape.intersect(clipping_box(high_min, high_max), tol=tolerance).clean()
-    if low.isNull() or high.isNull():
-        raise GenerationError("Split produced an empty half")
-    return low, high

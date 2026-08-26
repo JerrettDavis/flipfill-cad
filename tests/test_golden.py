@@ -21,8 +21,8 @@ from flipfill.project_io import load_project
 EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "portable_monitor_demo.flipfill.json"
 
 EXPECTED_VOLUME_MM3 = 64338.905
-EXPECTED_SPLIT_A_MM3 = 14046.024
-EXPECTED_SPLIT_B_MM3 = 49938.679
+EXPECTED_SLICE_BOTTOM_SHELL_MM3 = 14046.024
+EXPECTED_SLICE_TOP_SHELL_MM3 = 49938.679
 
 
 @pytest.fixture(scope="module")
@@ -40,7 +40,7 @@ def test_example_project_loads_with_expected_shape(generated) -> None:
         "Speaker",
         "Screen Opening",
     }
-    assert project.split.enabled is True
+    assert project.slicing.enabled is True
 
 
 def test_example_project_generates_cleanly(generated) -> None:
@@ -57,11 +57,13 @@ def test_example_project_volume_is_pinned(generated) -> None:
     assert result.result.Volume() == pytest.approx(EXPECTED_VOLUME_MM3, rel=1.0e-3)
 
 
-def test_example_project_split_volumes_are_pinned(generated) -> None:
+def test_example_project_slice_volumes_are_pinned(generated) -> None:
     _, result = generated
-    assert result.split_a is not None and result.split_b is not None
-    assert result.split_a.Volume() == pytest.approx(EXPECTED_SPLIT_A_MM3, rel=1.0e-3)
-    assert result.split_b.Volume() == pytest.approx(EXPECTED_SPLIT_B_MM3, rel=1.0e-3)
-    # The two halves are strictly smaller than the whole body: the 0.35mm
-    # split gap configured in this example removes a thin slab between them.
-    assert result.split_a.Volume() + result.split_b.Volume() < result.result.Volume()
+    assert set(result.sliced_bodies) == {"Bottom Shell", "Top Shell"}
+    bottom = result.sliced_bodies["Bottom Shell"]
+    top = result.sliced_bodies["Top Shell"]
+    assert bottom.Volume() == pytest.approx(EXPECTED_SLICE_BOTTOM_SHELL_MM3, rel=1.0e-3)
+    assert top.Volume() == pytest.approx(EXPECTED_SLICE_TOP_SHELL_MM3, rel=1.0e-3)
+    # The two pieces are strictly smaller than the whole body: the 0.35mm
+    # kerf gap configured in this example removes a thin slab between them.
+    assert bottom.Volume() + top.Volume() < result.result.Volume()

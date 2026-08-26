@@ -15,7 +15,7 @@ layer, and two thin front ends (CLI, desktop UI) that both drive it.
 ┌──────────────────────────▼───────────────────────────────┐
 │ flipfill.commands (application service layer)             │
 │ create/open project, import, find/move/rotate/align,      │
-│ role/clearance, blocker primitives, envelope, split,       │
+│ role/clearance, blocker primitives, envelope, slicing,    │
 │ doctor -- no console I/O, no sys.exit, unit-testable        │
 └──────────────────────────┬───────────────────────────────┘
                            │ CadQuery shapes / meshes
@@ -23,7 +23,7 @@ layer, and two thin front ends (CLI, desktop UI) that both drive it.
 │ Geometry adapters                                       │
 │ STEP/BREP/IGES import, mesh reference import,            │
 │ primitive construction, transform, offset, tessellation,│
-│ generation (fit/fuse/cut/validate/split)                 │
+│ generation (fit/fuse/cut/validate/slice)                 │
 └──────────────────────────┬───────────────────────────────┘
                            │
 ┌──────────────────────────▼───────────────────────────────┐
@@ -44,7 +44,7 @@ Loads and saves schema-versioned JSON. Relative source paths are resolved agains
 
 ### `flipfill.commands`
 
-The application service layer shared by every front end: `create_project`, `open_project`, `find_object`, `import_geometry`, `list_objects`/`inspect_object`, `move_object`/`rotate_object`, `align_object`, `set_role`/`set_clearance`, `add_primitive_object`, `configure_envelope`/`fit_envelope`, `configure_split`, and `run_doctor`. Every function operates on plain `flipfill.model` types, performs no console I/O, and raises `CommandError` for user-facing problems -- so it is unit-testable directly and there is exactly one place that knows how to, say, resolve an object reference or align a bounding-box edge. `cli.py` is the only consumer today; the desktop UI is the next one, closing the last GUI/CLI logic duplication (scene mutation, not just rendering).
+The application service layer shared by every front end: `create_project`, `open_project`, `find_object`, `import_geometry`, `list_objects`/`inspect_object`, `move_object`/`rotate_object`, `align_object`, `set_role`/`set_clearance`, `add_primitive_object`, `configure_envelope`/`fit_envelope`, `configure_slicing`/`add_slice`/`remove_slice`/`reorder_slice`/`list_slices`, and `run_doctor`. Every function operates on plain `flipfill.model` types, performs no console I/O, and raises `CommandError` for user-facing problems -- so it is unit-testable directly and there is exactly one place that knows how to, say, resolve an object reference or align a bounding-box edge. `cli.py` consumes it throughout, and the desktop UI now calls it for slice management as well, closing that GUI/CLI logic duplication (scene mutation, not just rendering); the UI's remaining object and envelope editing is the next candidate to move behind it.
 
 ### `flipfill.geometry.align`
 
@@ -71,7 +71,7 @@ Contains the central use cases:
 - fuse additives;
 - subtract cavities and cutouts;
 - validate invariants; and
-- split the generated body.
+- slice the generated body into named pieces.
 
 The generator has no GUI dependency and is exercised directly by tests and the CLI.
 
@@ -97,13 +97,14 @@ Coordinates user interaction, scene state, generation, reporting, and export.
 
 ## Dependency direction
 
-The domain model has no dependency on CadQuery, VTK, Tk, or Trimesh. Geometry depends on the model. `commands` depends on geometry and the model. The CLI depends on `commands`. UI depends on geometry and rendering directly today (see `commands` above); it does not, and should not, re-implement geometry math. The core never calls the UI.
+The domain model has no dependency on CadQuery, VTK, Tk, or Trimesh. Geometry depends on the model. `commands` depends on geometry and the model. The CLI depends on `commands`. The UI depends on `commands` for slice management and on geometry and rendering directly for the rest (see `commands` above); it does not, and should not, re-implement geometry math. The core never calls the UI.
 
 ## Extensibility seams
 
 - New source formats can be added behind `GeometryRepository`.
 - New primitive types can be added behind `make_primitive` and `PrimitiveKind`.
 - New clearance strategies can be added behind `_subtractive_shape`.
+- New slice cutter kinds can be added behind `SliceCutterKind`.
 - New envelope generators can implement the same BRep-returning contract.
 - Additional validators append `GenerationMessage` values.
 - Alternative UIs or automations can consume `flipfill.commands` directly instead of shelling out to the CLI.

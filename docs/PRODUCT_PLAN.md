@@ -2,7 +2,7 @@
 
 ## Product thesis
 
-Designing a one-off electronics enclosure often requires more CAD expertise than the electronics project itself. The designer must import several vendor models, align them, reason about tolerances, produce internal cavities, add port and cable access, split the shell, and repeatedly inspect for collisions.
+Designing a one-off electronics enclosure often requires more CAD expertise than the electronics project itself. The designer must import several vendor models, align them, reason about tolerances, produce internal cavities, add port and cable access, slice the shell into named parts, and repeatedly inspect for collisions.
 
 FlipFill turns that into an explicit spatial workflow:
 
@@ -71,7 +71,7 @@ FlipFill produces a strong starting BRep. Detailed seams, snaps, bosses, gaskets
 - Exact, offset, AABB, and OBB clearance.
 - Inverse-fill Boolean generation.
 - Validation and collision reporting.
-- Planar split.
+- Ordered multi-body slicing (plane and object cutters).
 - STEP/STL/BREP and fit-check assembly export.
 - JSON project persistence.
 - Desktop and headless interfaces.
@@ -88,6 +88,6 @@ FlipFill produces a strong starting BRep. Detailed seams, snaps, bosses, gaskets
 
 ## Success criteria
 
-A user can take display, battery, and speaker STEP models, position them without hidden intersections, create a rounded external envelope, add screen and port blockers, generate a valid solid, split it, and import the exported STEP assembly into Fusion 360 with all key bodies aligned.
+A user can take display, battery, and speaker STEP models, position them without hidden intersections, create a rounded external envelope, add screen and port blockers, generate a valid solid, slice it into named parts, and import the exported STEP assembly into Fusion 360 with all key bodies aligned.
 
 The prototype meets that behavioral slice today through the included example and test suite.

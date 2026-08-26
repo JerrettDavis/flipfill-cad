@@ -4,7 +4,7 @@
   "units": "mm",
   "objects": [
     {
-      "id": "1d3c099b-e060-48dd-970a-d02ef303a420",
+      "id": "b5adda97-3005-4f75-9c58-1888f7f7db78",
       "name": "3.5in Display Module",
       "role": "occupant",
       "transform": {
@@ -19,7 +19,7 @@
           0.0
         ]
       },
-      "source_path": "assets/demo_display_module.step",
+      "source_path": "assets\\demo_display_module.step",
       "primitive": null,
       "visible": true,
       "included_in_envelope_fit": true,
@@ -29,7 +29,7 @@
       "metadata": {}
     },
     {
-      "id": "dbd45b45-4cc9-4368-b974-1ae17959555b",
+      "id": "dfc8c957-4bfc-4dda-b77b-e0928b3084b3",
       "name": "LiPo Battery",
       "role": "occupant",
       "transform": {
@@ -44,7 +44,7 @@
           0.0
         ]
       },
-      "source_path": "assets/demo_battery.step",
+      "source_path": "assets\\demo_battery.step",
       "primitive": null,
       "visible": true,
       "included_in_envelope_fit": true,
@@ -54,7 +54,7 @@
       "metadata": {}
     },
     {
-      "id": "3d8d01c8-860c-409f-a445-b26406b7e456",
+      "id": "1b76a345-5251-4ab7-87c7-1d67b6f63eb1",
       "name": "Speaker",
       "role": "occupant",
       "transform": {
@@ -69,7 +69,7 @@
           0.0
         ]
       },
-      "source_path": "assets/demo_speaker.step",
+      "source_path": "assets\\demo_speaker.step",
       "primitive": null,
       "visible": true,
       "included_in_envelope_fit": true,
@@ -79,7 +79,7 @@
       "metadata": {}
     },
     {
-      "id": "6b4ca11e-c605-48bc-998b-3e1384d4356e",
+      "id": "00b8a4cb-0d1b-43b9-96bd-9d19b4e542fe",
       "name": "Screen Opening",
       "role": "cutout",
       "transform": {
@@ -112,7 +112,7 @@
       "metadata": {}
     },
     {
-      "id": "668f1289-5179-4896-b4f0-5365de5ae716",
+      "id": "e4dff3f6-969c-4cd9-a68c-893c119abc12",
       "name": "USB-C Side Access",
       "role": "cutout",
       "transform": {
@@ -145,7 +145,7 @@
       "metadata": {}
     },
     {
-      "id": "9d42d00b-1db2-463c-83cc-4af80293a735",
+      "id": "6a557ee4-f581-46be-b638-92fe647bcaa5",
       "name": "Button Access",
       "role": "cutout",
       "transform": {
@@ -178,7 +178,7 @@
       "metadata": {}
     },
     {
-      "id": "c689a31d-e542-4cfd-8146-b1360c829596",
+      "id": "63f62775-10f3-4e7d-be88-45df7158e758",
       "name": "Speaker Grille Opening",
       "role": "cutout",
       "transform": {
@@ -211,7 +211,7 @@
       "metadata": {}
     },
     {
-      "id": "a79ebe1a-6128-43f1-a8d1-fd4ecb75d197",
+      "id": "9a4753ef-76b7-40ce-8f09-5d3d35bc3dee",
       "name": "Lanyard Channel",
       "role": "cutout",
       "transform": {
@@ -270,11 +270,29 @@
       3.0
     ]
   },
-  "split": {
+  "slicing": {
     "enabled": true,
-    "axis": "z",
-    "offset": 1.5,
-    "gap": 0.35
+    "slices": [
+      {
+        "name": "Bottom Shell",
+        "cutter_kind": "plane",
+        "transform": {
+          "translation": [
+            0.0,
+            0.0,
+            1.5
+          ],
+          "rotation_deg": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "gap": 0.35,
+        "object_id": null
+      }
+    ],
+    "remainder_name": "Top Shell"
   },
   "boolean_tolerance": 0.0001,
   "tessellation_tolerance": 0.15,

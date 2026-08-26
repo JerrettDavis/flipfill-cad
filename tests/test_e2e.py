@@ -1,7 +1,7 @@
 """True end-to-end workflow tests driven entirely through the public CLI.
 
 Each test creates a project, imports hardware, positions and classifies it,
-fits an envelope, generates and validates the enclosure, optionally splits
+fits an envelope, generates and validates the enclosure, optionally slices
 it, exports STEP, and reopens the project/outputs to verify what was
 actually written to disk -- the same sequence a real user's shell script
 would run.
@@ -111,13 +111,25 @@ def test_full_enclosure_workflow(tmp_path: Path, capsys: pytest.CaptureFixture[s
         main(["envelope", str(project_path), "--fit", "--margin", "4", "4", "4"]) == 0
     )
 
-    # 6. Enable a planar split down the middle.
+    # 6. Add a plane slice and enable slicing.
     assert (
         main(
-            ["split", str(project_path), "--enable", "--axis", "z", "--offset", "0", "--gap", "0.3"]
+            [
+                "slice",
+                str(project_path),
+                "add",
+                "--name",
+                "Bottom",
+                "--plane",
+                "--at-z",
+                "0",
+                "--gap",
+                "0.3",
+            ]
         )
         == 0
     )
+    assert main(["slice", str(project_path), "enable"]) == 0
 
     # 7. Validate before export -- must report no errors (no unintended
     # intersections between the occupants, cutout, and generated body).
@@ -129,10 +141,10 @@ def test_full_enclosure_workflow(tmp_path: Path, capsys: pytest.CaptureFixture[s
     assert validation["valid"] is True
     assert validation["volume_mm3"] > 0
 
-    # 8. Generate and export STEP, the fit-check assembly, and split halves.
+    # 8. Generate and export STEP, the fit-check assembly, and sliced bodies.
     output = tmp_path / "out" / "case.step"
     fitcheck = tmp_path / "out" / "case_fitcheck.step"
-    split_dir = tmp_path / "out"
+    slice_dir = tmp_path / "out"
     assert (
         main(
             [
@@ -142,40 +154,40 @@ def test_full_enclosure_workflow(tmp_path: Path, capsys: pytest.CaptureFixture[s
                 str(output),
                 "--fitcheck",
                 str(fitcheck),
-                "--split-dir",
-                str(split_dir),
+                "--slice-dir",
+                str(slice_dir),
             ]
         )
         == 0
     )
     assert output.exists() and output.stat().st_size > 0
     assert fitcheck.exists() and fitcheck.stat().st_size > 0
-    split_a = split_dir / "case_A.step"
-    split_b = split_dir / "case_B.step"
-    assert split_a.exists() and split_a.stat().st_size > 0
-    assert split_b.exists() and split_b.stat().st_size > 0
+    slice_bottom = slice_dir / "case_bottom.step"
+    slice_remainder = slice_dir / "case_remainder.step"
+    assert slice_bottom.exists() and slice_bottom.stat().st_size > 0
+    assert slice_remainder.exists() and slice_remainder.stat().st_size > 0
 
     # 9. Reopen the saved project from disk and verify what was persisted.
     reloaded = load_project(project_path)
     assert reloaded.name == "E2E Case"
     assert {o.name for o in reloaded.objects} == {"Board", "Battery", "USB Access"}
-    assert reloaded.split.enabled is True
+    assert reloaded.slicing.enabled is True
 
     # 10. Reimport every exported STEP artifact and verify it is a valid,
     # non-degenerate solid.
     repository = GeometryRepository()
-    for artifact in (output, fitcheck, split_a, split_b):
+    for artifact in (output, fitcheck, slice_bottom, slice_remainder):
         resolved = repository.load(artifact)
         assert resolved.brep is not None
         assert resolved.brep.isValid()
         assert resolved.brep.Volume() > 0
 
-    # The two split halves are strictly smaller than the whole body: the
-    # configured 0.3mm split gap removes a thin slab between them.
+    # The two sliced pieces are strictly smaller than the whole body: the
+    # configured 0.3mm kerf gap removes a thin slab between them.
     body = repository.load(output).brep
-    half_a = repository.load(split_a).brep
-    half_b = repository.load(split_b).brep
-    assert 0 < half_a.Volume() + half_b.Volume() < body.Volume()
+    bottom = repository.load(slice_bottom).brep
+    remainder = repository.load(slice_remainder).brep
+    assert 0 < bottom.Volume() + remainder.Volume() < body.Volume()
 
 
 def test_workflow_reports_overlapping_occupants(

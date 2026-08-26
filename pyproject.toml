@@ -30,6 +30,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8,<10",
+  "pytest-bdd>=7,<9",
   "pytest-cov>=6,<8",
   "ruff>=0.11,<1",
   "mypy>=1.15,<3",
