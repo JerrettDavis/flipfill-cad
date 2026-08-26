@@ -40,10 +40,11 @@ class GeometryKind(StrEnum):
     PRIMITIVE = "primitive"
 
 
-class SplitAxis(StrEnum):
-    X = "x"
-    Y = "y"
-    Z = "z"
+class SliceCutterKind(StrEnum):
+    """How a SliceSpec's cutting tool is defined."""
+
+    PLANE = "plane"
+    OBJECT = "object"
 
 
 @dataclass(slots=True)
@@ -223,28 +224,63 @@ class EnvelopeSpec:
 
 
 @dataclass(slots=True)
-class SplitSpec:
-    enabled: bool = False
-    axis: SplitAxis = SplitAxis.Z
-    offset: float = 0.0
+class SliceSpec:
+    """One ordered cut. A plane cutter carves off everything on its local
+    -Z side (named ``name``); local +Z continues to the next cut or
+    becomes the slicing remainder. An object cutter uses an existing
+    SceneObject's resolved solid as the cutting tool instead."""
+
+    name: str = "Body"
+    cutter_kind: SliceCutterKind = SliceCutterKind.PLANE
+    transform: Transform = field(default_factory=Transform)
     gap: float = 0.0
+    object_id: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "cutter_kind": self.cutter_kind.value,
+            "transform": self.transform.to_dict(),
+            "gap": float(self.gap),
+            "object_id": self.object_id,
+        }
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> SliceSpec:
+        return cls(
+            name=str(value.get("name", "Body")),
+            cutter_kind=SliceCutterKind(
+                value.get("cutter_kind", SliceCutterKind.PLANE.value)
+            ),
+            transform=Transform.from_dict(value.get("transform")),
+            gap=float(value.get("gap", 0.0)),
+            object_id=value.get("object_id"),
+        )
+
+
+@dataclass(slots=True)
+class SlicingSpec:
+    """An ordered list of cuts applied to the generated body, producing
+    ``len(slices) + 1`` named bodies (the last named ``remainder_name``)."""
+
+    enabled: bool = False
+    slices: list[SliceSpec] = field(default_factory=list)
+    remainder_name: str = "Remainder"
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "enabled": bool(self.enabled),
-            "axis": self.axis.value,
-            "offset": float(self.offset),
-            "gap": float(self.gap),
+            "slices": [s.to_dict() for s in self.slices],
+            "remainder_name": self.remainder_name,
         }
 
     @classmethod
-    def from_dict(cls, value: dict[str, Any] | None) -> SplitSpec:
+    def from_dict(cls, value: dict[str, Any] | None) -> SlicingSpec:
         value = value or {}
         return cls(
             enabled=bool(value.get("enabled", False)),
-            axis=SplitAxis(value.get("axis", SplitAxis.Z.value)),
-            offset=float(value.get("offset", 0.0)),
-            gap=float(value.get("gap", 0.0)),
+            slices=[SliceSpec.from_dict(v) for v in value.get("slices", [])],
+            remainder_name=str(value.get("remainder_name", "Remainder")),
         )
 
 
@@ -255,7 +291,7 @@ class Project:
     units: str = "mm"
     objects: list[SceneObject] = field(default_factory=list)
     envelope: EnvelopeSpec = field(default_factory=EnvelopeSpec)
-    split: SplitSpec = field(default_factory=SplitSpec)
+    slicing: SlicingSpec = field(default_factory=SlicingSpec)
     boolean_tolerance: float = 1.0e-4
     tessellation_tolerance: float = 0.15
     notes: str = ""
@@ -267,7 +303,7 @@ class Project:
             "units": self.units,
             "objects": [obj.to_dict() for obj in self.objects],
             "envelope": self.envelope.to_dict(),
-            "split": self.split.to_dict(),
+            "slicing": self.slicing.to_dict(),
             "boolean_tolerance": float(self.boolean_tolerance),
             "tessellation_tolerance": float(self.tessellation_tolerance),
             "notes": self.notes,
@@ -286,7 +322,7 @@ class Project:
             units=str(value.get("units", "mm")),
             objects=[SceneObject.from_dict(v) for v in value.get("objects", [])],
             envelope=EnvelopeSpec.from_dict(value.get("envelope")),
-            split=SplitSpec.from_dict(value.get("split")),
+            slicing=SlicingSpec.from_dict(value.get("slicing")),
             boolean_tolerance=float(value.get("boolean_tolerance", 1.0e-4)),
             tessellation_tolerance=float(value.get("tessellation_tolerance", 0.15)),
             notes=str(value.get("notes", "")),

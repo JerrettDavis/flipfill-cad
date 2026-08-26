@@ -7,7 +7,8 @@ from .model import (
     PrimitiveKind,
     Project,
     SceneObject,
-    SplitAxis,
+    SliceCutterKind,
+    SliceSpec,
     Transform,
     Vector3,
 )
@@ -19,7 +20,8 @@ __all__ = [
     "PrimitiveKind",
     "Project",
     "SceneObject",
-    "SplitAxis",
+    "SliceCutterKind",
+    "SliceSpec",
     "Transform",
     "Vector3",
 ]
