@@ -39,7 +39,14 @@ from flipfill.geometry.exporters import (
 )
 from flipfill.geometry.generator import GenerationError, MessageLevel, generate
 from flipfill.geometry.importers import GeometryRepository, ImportGeometryError
-from flipfill.model import ClearanceMode, ObjectRole, PrimitiveKind, SliceCutterKind, Transform, Vector3
+from flipfill.model import (
+    ClearanceMode,
+    ObjectRole,
+    PrimitiveKind,
+    SliceCutterKind,
+    Transform,
+    Vector3,
+)
 from flipfill.project_io import ProjectIoError, load_project, save_project
 
 try:
