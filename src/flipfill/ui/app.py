@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import copy
 import sys
 import tkinter as tk
@@ -29,6 +30,8 @@ from flipfill.model import (
     Vector3,
 )
 from flipfill.project_io import load_project, save_project
+from flipfill.ui.icons import IconStore
+from flipfill.ui.tooltip import Tooltip
 from flipfill.ui.viewport import CadViewport
 
 ENVELOPE_ID = "__envelope__"
@@ -39,11 +42,13 @@ class FlipFillApp:
     def __init__(self, root: tk.Tk, initial_project: str | None = None) -> None:
         self.root = root
         self.root.title("FlipFill CAD")
-        self.root.geometry("1480x900")
-        self.root.minsize(1120, 700)
+        self.root.geometry("1600x920")
+        self.root.minsize(1180, 700)
 
         self.appearance = tk.StringVar(value="Dark")
-        self.palette: dict[str, str] = {}
+        self.palette: dict[str, object] = {}
+        self.icons = IconStore()
+        self._icon_widgets: list[tuple[tk.Widget, str, str | None]] = []
 
         self.project = Project()
         self.project_path: Path | None = None
@@ -79,54 +84,249 @@ class FlipFillApp:
     def _apply_theme(self) -> None:
         dark = self.appearance.get() == "Dark"
         p = {
-            "bg": "#17191d" if dark else "#f3f4f6",
-            "panel": "#202329" if dark else "#ffffff",
-            "panel_2": "#282c33" if dark else "#e9ebef",
-            "field": "#15171b" if dark else "#ffffff",
-            "text": "#f1f3f5" if dark else "#20242b",
-            "muted": "#9ba3af" if dark else "#626b78",
-            "border": "#383e47" if dark else "#cbd0d8",
-            "accent": "#3b82f6",
-            "accent_active": "#2563eb",
-            "selection": "#245da8" if dark else "#cfe2ff",
-            "danger": "#ff7272" if dark else "#b42318",
+            "bg": "#111318" if dark else "#eef0f3",
+            "panel": "#1a1d23" if dark else "#ffffff",
+            "panel_2": "#22262e" if dark else "#e4e7ec",
+            "panel_3": "#2a2f38" if dark else "#d8dce3",
+            "field": "#14161b" if dark else "#ffffff",
+            "text": "#eef0f3" if dark else "#1c2029",
+            "muted": "#8b93a1" if dark else "#5b6472",
+            "border": "#2f333c" if dark else "#d6dae1",
+            "border_soft": "#23262d" if dark else "#e6e9ee",
+            "hover": "#2f343d" if dark else "#e4e7ec",
+            "accent": "#4f8cff",
+            "accent_active": "#3b74e6",
+            "accent_soft": "#25324a" if dark else "#dbe6ff",
+            "selection": "#2a4a7a" if dark else "#d6e4ff",
+            "danger": "#ff6b6b" if dark else "#c0362c",
+            "success": "#3ecf8e",
+        }
+        p["role_colors"] = {
+            ObjectRole.OCCUPANT: p["accent"],
+            ObjectRole.CUTOUT: "#f2b134",
+            ObjectRole.ADDITIVE: p["success"],
         }
         self.palette = p
         self.root.configure(background=p["bg"])
         style = ttk.Style(self.root)
         style.configure(".", background=p["panel"], foreground=p["text"], font=("Segoe UI", 9))
         style.configure("TFrame", background=p["panel"])
-        style.configure("Toolbar.TFrame", background=p["panel"], padding=(12, 8))
-        style.configure("Status.TFrame", background=p["panel"], padding=(12, 5))
+        style.configure("Card.TFrame", background=p["panel_2"])
+        style.configure("Toolbar.TFrame", background=p["panel_2"], padding=(14, 9))
+        style.configure("Status.TFrame", background=p["panel_2"], padding=(12, 6))
         style.configure("TLabel", background=p["panel"], foreground=p["text"])
-        style.configure("Title.TLabel", font=("Segoe UI Semibold", 11), foreground=p["text"])
-        style.configure("Brand.TLabel", font=("Segoe UI Semibold", 13), foreground=p["text"])
-        style.configure("Muted.TLabel", foreground=p["muted"])
-        style.configure("Section.TLabel", font=("Segoe UI Semibold", 9), foreground=p["muted"])
-        style.configure("Danger.TLabel", foreground=p["danger"])
-        style.configure("TButton", padding=(10, 6), background=p["panel_2"], foreground=p["text"], relief="flat")
-        style.map("TButton", background=[("active", p["border"]), ("pressed", p["field"])])
-        style.configure("Accent.TButton", background=p["accent"], foreground="#ffffff", font=("Segoe UI Semibold", 9))
+        style.configure("Toolbar.TLabel", background=p["panel_2"], foreground=p["text"])
+        style.configure("Status.TLabel", background=p["panel_2"], foreground=p["text"])
+        style.configure("Title.TLabel", background=p["panel"], font=("Segoe UI Semibold", 11), foreground=p["text"])
+        style.configure("Brand.TLabel", background=p["panel_2"], font=("Segoe UI Semibold", 13), foreground=p["text"])
+        style.configure("Muted.TLabel", background=p["panel"], foreground=p["muted"])
+        style.configure("ToolbarMuted.TLabel", background=p["panel_2"], foreground=p["muted"], font=("Segoe UI", 7))
+        style.configure("Section.TLabel", background=p["panel"], font=("Segoe UI Semibold", 8), foreground=p["muted"])
+        style.configure("Card.TLabel", background=p["panel_2"], foreground=p["muted"])
+        style.configure(
+            "CardSection.TLabel",
+            background=p["panel_2"],
+            font=("Segoe UI Semibold", 8),
+            foreground=p["muted"],
+        )
+        style.configure("Danger.TLabel", background=p["panel"], foreground=p["danger"])
+        style.configure(
+            "TButton",
+            padding=(10, 6),
+            background=p["panel_3"],
+            foreground=p["text"],
+            borderwidth=0,
+            focusthickness=0,
+            relief="flat",
+        )
+        style.map(
+            "TButton",
+            background=[("pressed", p["accent_active"]), ("active", p["hover"])],
+            foreground=[("disabled", p["muted"])],
+        )
+        style.configure(
+            "Accent.TButton",
+            background=p["accent"],
+            foreground="#ffffff",
+            font=("Segoe UI Semibold", 9),
+            padding=(14, 7),
+        )
         style.map("Accent.TButton", background=[("active", p["accent_active"]), ("pressed", p["accent_active"])])
-        style.configure("Tool.TButton", padding=(9, 5))
-        style.configure("TEntry", fieldbackground=p["field"], foreground=p["text"], insertcolor=p["text"], bordercolor=p["border"], padding=5)
-        style.configure("TCombobox", fieldbackground=p["field"], foreground=p["text"], arrowcolor=p["muted"], padding=4)
-        style.map("TCombobox", fieldbackground=[("readonly", p["field"])], foreground=[("readonly", p["text"])])
-        style.configure("Treeview", background=p["panel"], fieldbackground=p["panel"], foreground=p["text"], bordercolor=p["border"], rowheight=27)
-        style.configure("Treeview.Heading", background=p["panel_2"], foreground=p["muted"], font=("Segoe UI Semibold", 8), padding=(5, 6), relief="flat")
-        style.map("Treeview", background=[("selected", p["selection"])], foreground=[("selected", "#ffffff" if dark else p["text"])])
-        style.configure("TNotebook", background=p["panel"], bordercolor=p["border"])
-        style.configure("TNotebook.Tab", background=p["panel"], foreground=p["muted"], padding=(14, 8), font=("Segoe UI Semibold", 9))
-        style.map("TNotebook.Tab", background=[("selected", p["panel_2"])], foreground=[("selected", p["text"])])
-        style.configure("TSeparator", background=p["border"])
+        style.configure("Tool.TButton", padding=(8, 5), background=p["panel_2"])
+        style.map("Tool.TButton", background=[("pressed", p["accent_active"]), ("active", p["hover"])])
+        style.configure("View.TButton", padding=(6, 5), background=p["panel_2"])
+        style.map("View.TButton", background=[("pressed", p["accent_active"]), ("active", p["hover"])])
+        style.configure(
+            "TEntry",
+            fieldbackground=p["field"],
+            foreground=p["text"],
+            insertcolor=p["text"],
+            bordercolor=p["border"],
+            lightcolor=p["border"],
+            darkcolor=p["border"],
+            padding=6,
+            borderwidth=1,
+            relief="flat",
+        )
+        style.map("TEntry", bordercolor=[("focus", p["accent"])])
+        style.configure(
+            "TCombobox",
+            fieldbackground=p["field"],
+            background=p["field"],
+            foreground=p["text"],
+            arrowcolor=p["muted"],
+            bordercolor=p["border"],
+            lightcolor=p["border"],
+            darkcolor=p["border"],
+            padding=5,
+            relief="flat",
+        )
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", p["field"])],
+            foreground=[("readonly", p["text"])],
+            bordercolor=[("focus", p["accent"])],
+        )
+        style.configure(
+            "TCheckbutton", background=p["panel"], foreground=p["text"], focuscolor=p["panel"]
+        )
+        style.map("TCheckbutton", background=[("active", p["panel"])])
+        style.configure(
+            "Treeview",
+            background=p["panel"],
+            fieldbackground=p["panel"],
+            foreground=p["text"],
+            bordercolor=p["panel"],
+            borderwidth=0,
+            relief="flat",
+            rowheight=27,
+        )
+        style.configure(
+            "Treeview.Heading",
+            background=p["panel_2"],
+            foreground=p["muted"],
+            font=("Segoe UI Semibold", 8),
+            padding=(6, 7),
+            relief="flat",
+            borderwidth=0,
+        )
+        style.map("Treeview.Heading", background=[("active", p["panel_3"])])
+        style.map(
+            "Treeview",
+            background=[("selected", p["selection"])],
+            foreground=[("selected", "#ffffff" if dark else p["text"])],
+        )
+        style.configure("TNotebook", background=p["panel"], bordercolor=p["panel"], borderwidth=0)
+        style.configure(
+            "TNotebook.Tab",
+            background=p["panel"],
+            foreground=p["muted"],
+            padding=(16, 9),
+            font=("Segoe UI Semibold", 9),
+            borderwidth=0,
+        )
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", p["panel"])],
+            foreground=[("selected", p["accent"])],
+        )
+        style.configure("TSeparator", background=p["border_soft"])
+        style.configure(
+            "Vertical.TScrollbar",
+            background=p["panel_3"],
+            troughcolor=p["panel"],
+            bordercolor=p["panel"],
+            arrowcolor=p["muted"],
+            gripcount=0,
+            relief="flat",
+        )
+        style.map("Vertical.TScrollbar", background=[("active", p["accent"])])
+        style.configure(
+            "Horizontal.TScrollbar",
+            background=p["panel_3"],
+            troughcolor=p["panel"],
+            bordercolor=p["panel"],
+            arrowcolor=p["muted"],
+            gripcount=0,
+            relief="flat",
+        )
+        style.map("Horizontal.TScrollbar", background=[("active", p["accent"])])
+        self.root.option_add("*TCombobox*Listbox.background", p["field"])
+        self.root.option_add("*TCombobox*Listbox.foreground", p["text"])
+        self.root.option_add("*TCombobox*Listbox.selectBackground", p["selection"])
+        self.root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff" if dark else p["text"])
+        self.root.option_add("*TCombobox*Listbox.font", ("Segoe UI", 9))
+        self.root.option_add("*TCombobox*Listbox.borderWidth", 0)
+        self.root.option_add("*TCombobox*Listbox.highlightThickness", 1)
+        self.root.option_add("*TCombobox*Listbox.highlightColor", p["border"])
         if hasattr(self, "pane"):
-            self.pane.configure(bg=p["border"])
+            self.pane.configure(bg=p["bg"], sashwidth=6, sashrelief=tk.FLAT, bd=0)
         if hasattr(self, "log"):
-            self.log.configure(background=p["field"], foreground=p["text"], insertbackground=p["text"], selectbackground=p["selection"], relief=tk.FLAT)
+            self.log.configure(
+                background=p["field"],
+                foreground=p["text"],
+                insertbackground=p["text"],
+                selectbackground=p["selection"],
+                relief=tk.FLAT,
+                borderwidth=0,
+                highlightthickness=1,
+                highlightbackground=p["border"],
+                highlightcolor=p["accent"],
+            )
+            self.log.tag_configure("error", foreground=p["danger"])
+            self.log.tag_configure("warning", foreground="#f2b134")
+            self.log.tag_configure("info", foreground=p["accent"])
+            self.log.tag_configure("success", foreground=p["success"])
         if hasattr(self, "viewport"):
             self.viewport.set_theme(dark)
         if hasattr(self, "menu"):
             self._style_menu(self.menu)
+        if hasattr(self, "status_dot"):
+            self.status_dot.configure(background=p["panel_2"], foreground=p["success"])
+        self._refresh_icon_widgets()
+
+    def _refresh_icon_widgets(self) -> None:
+        p = self.palette
+        if not p:
+            return
+        for widget, name, accent in self._icon_widgets:
+            style_name = ""
+            with contextlib.suppress(tk.TclError):
+                style_name = str(widget.cget("style"))
+            color = "#ffffff" if style_name == "Accent.TButton" else p["muted"]
+            photo = self.icons.get(name, color, size=16, accent=accent)
+            widget.configure(image=photo)
+            widget.image = photo  # type: ignore[attr-defined]
+
+    def _icon_button(
+        self,
+        parent: tk.Widget,
+        text: str,
+        icon: str,
+        command: Callable[[], None],
+        *,
+        style: str = "Tool.TButton",
+        accent: str | None = None,
+        width: int | None = None,
+        tooltip: str | None = None,
+    ) -> ttk.Button:
+        color = "#ffffff" if style == "Accent.TButton" else self.palette.get("muted", "#8b93a1")
+        photo = self.icons.get(icon, color, size=16, accent=accent)
+        kwargs = {"width": width} if width is not None else {}
+        button = ttk.Button(
+            parent,
+            text=f" {text}" if text else "",
+            image=photo,
+            compound=tk.LEFT if text else tk.CENTER,
+            command=command,
+            style=style,
+            **kwargs,
+        )
+        button.image = photo  # type: ignore[attr-defined]
+        self._icon_widgets.append((button, icon, accent))
+        if tooltip:
+            Tooltip(button, tooltip, lambda: self.palette)
+        return button
 
     def _style_menu(self, menu: tk.Menu) -> None:
         p = self.palette
@@ -223,40 +423,74 @@ class FlipFillApp:
     def _build_toolbar(self) -> None:
         bar = ttk.Frame(self.root, style="Toolbar.TFrame")
         bar.pack(side=tk.TOP, fill=tk.X)
+        ttk.Separator(self.root).pack(side=tk.TOP, fill=tk.X)
 
-        brand = ttk.Frame(bar)
+        brand = ttk.Frame(bar, style="Toolbar.TFrame")
         brand.pack(side=tk.LEFT, padx=(0, 18))
         ttk.Label(brand, text="FLIPFILL", style="Brand.TLabel").pack(anchor=tk.W)
-        ttk.Label(brand, text="CLEARANCE CAD", style="Muted.TLabel").pack(anchor=tk.W)
+        ttk.Label(brand, text="CLEARANCE CAD", style="ToolbarMuted.TLabel").pack(anchor=tk.W)
 
-        buttons: list[tuple[str, Callable[[], None]]] = [
-            ("New", self.new_project),
-            ("Open", self.open_project),
-            ("Save", self.save_project),
-            ("Import", self.import_geometry),
-            ("+ Occupant", lambda: self.add_primitive(ObjectRole.OCCUPANT)),
-            ("+ Cutout", lambda: self.add_primitive(ObjectRole.CUTOUT)),
-            ("+ Additive", lambda: self.add_primitive(ObjectRole.ADDITIVE)),
+        file_buttons: list[tuple[str, str, Callable[[], None]]] = [
+            ("new", "New", self.new_project),
+            ("open", "Open", self.open_project),
+            ("save", "Save", self.save_project),
+            ("import", "Import", self.import_geometry),
         ]
-        for index, (label, command) in enumerate(buttons):
-            ttk.Button(bar, text=label, command=command, style="Tool.TButton").pack(
-                side=tk.LEFT, padx=(0 if index == 0 else 4, 0)
+        for index, (icon, label, command) in enumerate(file_buttons):
+            self._icon_button(bar, label, icon, command).pack(
+                side=tk.LEFT, padx=(0 if index == 0 else 3, 0)
             )
 
-        ttk.Separator(bar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=8)
-        ttk.Button(bar, text="Fit Envelope", command=self.fit_envelope_all, style="Tool.TButton").pack(side=tk.LEFT, padx=2)
-        ttk.Button(bar, text="Generate  F5", command=self.generate_model, style="Accent.TButton").pack(side=tk.LEFT, padx=4)
-        ttk.Button(bar, text="Export", command=self.export_step, style="Tool.TButton").pack(side=tk.LEFT, padx=2)
-        views = ttk.Frame(bar)
+        ttk.Separator(bar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+
+        add_buttons: list[tuple[str, ObjectRole, str]] = [
+            ("Occupant", ObjectRole.OCCUPANT, "Add an occupant box (subtracts a clearance cavity)"),
+            ("Cutout", ObjectRole.CUTOUT, "Add a cutout blocker (subtracts a port/tooling volume)"),
+            ("Additive", ObjectRole.ADDITIVE, "Add an additive (fuses bosses, ribs, pads)"),
+        ]
+        for index, (label, role, tip) in enumerate(add_buttons):
+            self._icon_button(
+                bar,
+                label,
+                "box_add",
+                lambda role=role: self.add_primitive(role),
+                accent=self.palette["role_colors"][role],
+                tooltip=tip,
+            ).pack(side=tk.LEFT, padx=(0 if index == 0 else 3, 0))
+
+        ttk.Separator(bar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        self._icon_button(
+            bar, "Fit Envelope", "fit", self.fit_envelope_all, tooltip="Fit envelope to included objects"
+        ).pack(side=tk.LEFT, padx=2)
+        self._icon_button(
+            bar,
+            "Generate  F5",
+            "generate",
+            self.generate_model,
+            style="Accent.TButton",
+            tooltip="Generate the inverse-fill body",
+        ).pack(side=tk.LEFT, padx=6)
+        self._icon_button(bar, "Export", "export", self.export_step).pack(side=tk.LEFT, padx=2)
+
+        views = ttk.Frame(bar, style="Toolbar.TFrame")
         views.pack(side=tk.RIGHT)
-        for label, command in [
-            ("Iso", self.viewport_isometric),
-            ("Top", self.viewport_top),
-            ("Front", self.viewport_front),
-            ("Side", self.viewport_side),
-            ("Fit View", self._fit_camera),
-        ]:
-            ttk.Button(views, text=label, width=7, command=command, style="Tool.TButton").pack(side=tk.LEFT, padx=2)
+        view_buttons = [
+            ("view_iso", "Isometric view", self.viewport_isometric),
+            ("view_top", "Top view", self.viewport_top),
+            ("view_front", "Front view", self.viewport_front),
+            ("view_side", "Side view", self.viewport_side),
+            ("fit", "Fit view to scene", self._fit_camera),
+        ]
+        for icon, tip, command in view_buttons:
+            self._icon_button(
+                views,
+                "",
+                icon,
+                command,
+                style="View.TButton",
+                accent=self.palette["accent_soft"],
+                tooltip=tip,
+            ).pack(side=tk.LEFT, padx=2)
 
     def _build_workspace(self) -> None:
         pane = tk.PanedWindow(
@@ -309,22 +543,30 @@ class FlipFillApp:
         self.tree.bind("<Double-1>", self._tree_double_click)
 
         action = ttk.Frame(parent)
-        action.pack(fill=tk.X, pady=(6, 0))
-        ttk.Button(action, text="Duplicate", command=self.duplicate_selected).pack(side=tk.LEFT)
-        ttk.Button(action, text="Delete", command=self.delete_selected).pack(side=tk.LEFT, padx=4)
-        ttk.Button(action, text="Toggle", command=self.toggle_visibility_selected).pack(side=tk.LEFT)
+        action.pack(fill=tk.X, pady=(8, 0))
+        self._icon_button(
+            action, "Duplicate", "duplicate", self.duplicate_selected, tooltip="Duplicate selection"
+        ).pack(side=tk.LEFT)
+        self._icon_button(
+            action, "Delete", "delete", self.delete_selected, tooltip="Delete selection"
+        ).pack(side=tk.LEFT, padx=4)
+        self._icon_button(
+            action, "", "eye", self.toggle_visibility_selected, tooltip="Toggle visibility"
+        ).pack(side=tk.LEFT)
 
-        ttk.Separator(parent).pack(fill=tk.X, pady=8)
-        ttk.Label(parent, text="Role semantics", style="Section.TLabel").pack(anchor=tk.W)
+        ttk.Separator(parent).pack(fill=tk.X, pady=10)
+        card = ttk.Frame(parent, style="Card.TFrame", padding=10)
+        card.pack(fill=tk.X)
+        ttk.Label(card, text="Role semantics", style="CardSection.TLabel").pack(anchor=tk.W)
         help_text = (
-            "Occupant: subtract a clearance cavity\n"
-            "Cutout: subtract a port/tooling blocker\n"
-            "Additive: fuse bosses, ribs, pads\n"
-            "Reference: display only"
+            "Occupant  subtract a clearance cavity\n"
+            "Cutout    subtract a port/tooling blocker\n"
+            "Additive  fuse bosses, ribs, pads\n"
+            "Reference display only"
         )
-        ttk.Label(parent, text=help_text, justify=tk.LEFT, wraplength=260).pack(
-            anchor=tk.W, pady=(3, 0)
-        )
+        ttk.Label(
+            card, text=help_text, style="Card.TLabel", justify=tk.LEFT, wraplength=250
+        ).pack(anchor=tk.W, pady=(5, 0))
 
     def _build_inspector(self, parent: ttk.Frame) -> None:
         ttk.Label(parent, text="Properties", style="Title.TLabel").pack(anchor=tk.W, pady=(0, 5))
@@ -610,18 +852,16 @@ class FlipFillApp:
         self.log.configure(yscrollcommand=scroll.set)
         self.log.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.log.tag_configure("error", foreground="#c0392b")
-        self.log.tag_configure("warning", foreground="#d68910")
-        self.log.tag_configure("info", foreground="#2471a3")
-        self.log.tag_configure("success", foreground="#1e8449")
 
     def _build_statusbar(self) -> None:
         self.status = tk.StringVar(value="Ready")
+        ttk.Separator(self.root).pack(side=tk.BOTTOM, fill=tk.X)
         frame = ttk.Frame(self.root, style="Status.TFrame")
         frame.pack(side=tk.BOTTOM, fill=tk.X)
-        ttk.Label(frame, text="●", foreground="#43d17b").pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Label(frame, textvariable=self.status).pack(side=tk.LEFT)
-        self.project_label = ttk.Label(frame, text="", style="Muted.TLabel")
+        self.status_dot = ttk.Label(frame, text="●", style="Status.TLabel")
+        self.status_dot.pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Label(frame, textvariable=self.status, style="Status.TLabel").pack(side=tk.LEFT)
+        self.project_label = ttk.Label(frame, text="", style="ToolbarMuted.TLabel")
         self.project_label.pack(side=tk.RIGHT)
 
     # ------------------------------------------------------------------
