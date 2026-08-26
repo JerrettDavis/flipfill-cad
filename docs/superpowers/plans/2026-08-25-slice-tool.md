@@ -27,6 +27,7 @@
 
 **Files:**
 - Modify: `src/flipfill/model.py`
+- Modify: `src/flipfill/__init__.py`
 - Test: `tests/test_model.py`
 
 **Interfaces:**
@@ -212,6 +213,66 @@ In `Project.to_dict`, replace `"split": self.split.to_dict(),` with `"slicing": 
 
 In `Project.from_dict`, replace `split=SplitSpec.from_dict(value.get("split")),` with `slicing=SlicingSpec.from_dict(value.get("slicing")),`.
 
+`src/flipfill/__init__.py` re-exports `SplitAxis` in its public API (it does not re-export `SplitSpec`). Replace:
+
+```python
+from .model import (
+    ClearanceMode,
+    EnvelopeSpec,
+    ObjectRole,
+    PrimitiveKind,
+    Project,
+    SceneObject,
+    SplitAxis,
+    Transform,
+    Vector3,
+)
+
+__all__ = [
+    "ClearanceMode",
+    "EnvelopeSpec",
+    "ObjectRole",
+    "PrimitiveKind",
+    "Project",
+    "SceneObject",
+    "SplitAxis",
+    "Transform",
+    "Vector3",
+]
+```
+
+with:
+
+```python
+from .model import (
+    ClearanceMode,
+    EnvelopeSpec,
+    ObjectRole,
+    PrimitiveKind,
+    Project,
+    SceneObject,
+    SliceCutterKind,
+    SliceSpec,
+    SlicingSpec,
+    Transform,
+    Vector3,
+)
+
+__all__ = [
+    "ClearanceMode",
+    "EnvelopeSpec",
+    "ObjectRole",
+    "PrimitiveKind",
+    "Project",
+    "SceneObject",
+    "SliceCutterKind",
+    "SliceSpec",
+    "SlicingSpec",
+    "Transform",
+    "Vector3",
+]
+```
+
 - [ ] **Step 4: Update the test imports**
 
 In `tests/test_model.py`, add `SliceCutterKind` and `SliceSpec` to the `from flipfill.model import (...)` block (keep everything else alphabetically sorted per ruff's `I` rule).
@@ -224,7 +285,7 @@ Expected: PASS (all tests in this file, including the pre-existing `test_project
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/flipfill/model.py tests/test_model.py
+git add src/flipfill/model.py src/flipfill/__init__.py tests/test_model.py
 git commit -m "feat(model): replace SplitSpec with an ordered multi-cut SlicingSpec"
 ```
 
