@@ -9,6 +9,7 @@ from .model import (
     SceneObject,
     SliceCutterKind,
     SliceSpec,
+    SlicingSpec,
     Transform,
     Vector3,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "SceneObject",
     "SliceCutterKind",
     "SliceSpec",
+    "SlicingSpec",
     "Transform",
     "Vector3",
 ]

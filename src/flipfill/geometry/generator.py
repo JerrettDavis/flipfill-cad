@@ -284,7 +284,12 @@ def _plane_knives(
     now-removed ``split_shape``, generalized from a world axis to an
     arbitrary oriented plane."""
 
-    padding = max(bounds.size.x, bounds.size.y, bounds.size.z, 1.0) + 10.0
+    # The knife is built around the plane's own origin, so padding by the body
+    # size alone misses a body whose center sits far from that origin (routine
+    # once fit_envelope_to_objects moves the envelope onto imported hardware).
+    to_center = bounds.center - transform.translation
+    span = max(abs(to_center.x), abs(to_center.y), abs(to_center.z))
+    padding = max(bounds.size.x, bounds.size.y, bounds.size.z, 1.0) + span + 10.0
     half_gap = max(0.0, gap) / 2.0
     size_xy = 2.0 * padding
     piece_knife = _local_box(size_xy, size_xy, -padding, -half_gap)

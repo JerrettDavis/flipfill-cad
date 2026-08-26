@@ -114,6 +114,16 @@ def _slugify(name: str) -> str:
     return slug or "body"
 
 
+def _unique_slug(name: str, seen: dict[str, int]) -> str:
+    """Slugify ``name``, suffixing later collisions so distinct body names
+    (``Top`` and ``top``) never overwrite each other's exported file."""
+
+    slug = _slugify(name)
+    count = seen.get(slug, 0) + 1
+    seen[slug] = count
+    return slug if count == 1 else f"{slug}_{count}"
+
+
 # ----------------------------------------------------------------------
 # new
 # ----------------------------------------------------------------------
@@ -560,8 +570,10 @@ def command_generate(args: argparse.Namespace) -> int:
         slice_dir.mkdir(parents=True, exist_ok=True)
         stem = Path(args.output).stem
         slice_outputs: dict[str, str] = {}
+        seen_slugs: dict[str, int] = {}
         for name, shape in generated.sliced_bodies.items():
-            exported = export_shape(shape, slice_dir / f"{stem}_{_slugify(name)}.step")
+            slug = _unique_slug(name, seen_slugs)
+            exported = export_shape(shape, slice_dir / f"{stem}_{slug}.step")
             slice_outputs[name] = str(exported)
         outputs["slices"] = slice_outputs
         if not getattr(args, "json", False):
@@ -650,9 +662,11 @@ def command_export(args: argparse.Namespace) -> int:
                     )
                 ),
             }
+            seen_slugs: dict[str, int] = {}
             for name, shape in generated.sliced_bodies.items():
+                slug = _unique_slug(name, seen_slugs)
                 written[f"slice:{name}"] = str(
-                    export_shape(shape, output_dir / f"{stem}_{_slugify(name)}.step")
+                    export_shape(shape, output_dir / f"{stem}_{slug}.step")
                 )
             save_project(project, output_dir / f"{stem}.flipfill.json")
             written["project"] = str(output_dir / f"{stem}.flipfill.json")

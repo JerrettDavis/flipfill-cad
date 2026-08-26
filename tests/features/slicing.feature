@@ -5,10 +5,10 @@ Feature: Slicing a generated body into multiple named parts
     And a screen, a battery, and mounting screws positioned inside it
     When the project is generated
     Then generation succeeds with no errors
-    When I add a horizontal slice named "Front Bezel" near the front face
-    And I add a horizontal slice named "Center Support" further back
-    And the project is generated again with slicing enabled
+    When I add a horizontal slice named "Rear Shell" furthest from the front face
+    And I add a horizontal slice named "Center Support" nearer the front face
+    And the project is generated again with slicing enabled, leaving a "Front Bezel"
     Then generation produces exactly 3 bodies
     And every produced body is a valid, positive-volume solid
-    And the bodies are named "Front Bezel", "Center Support", and "Remainder"
+    And the bodies are named "Rear Shell", "Center Support", and "Front Bezel"
     And every body's STEP export opens as a valid solid

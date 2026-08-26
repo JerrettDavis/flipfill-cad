@@ -86,13 +86,12 @@ def _assert_no_errors(ctx: dict) -> None:
     assert ctx["generated"].errors == []
 
 
-@when(parsers.parse('I add a horizontal slice named "{name}" near the front face'))
-def _add_front_slice(ctx: dict, name: str) -> None:
+@when(parsers.parse('I add a horizontal slice named "{name}" furthest from the front face'))
+def _add_rear_slice(ctx: dict, name: str) -> None:
     # slice_result() carves each named piece from the local -Z side of its
     # cutter plane and feeds the +Z side forward as the remainder, so
-    # sequential plane cuts must use strictly increasing Z -- this slice is
-    # applied first, so it takes the lower of the two cutter heights even
-    # though it is named for the "front" (higher) face.
+    # sequential plane cuts must use strictly increasing Z: the deepest cut
+    # runs first and yields the rear shell.
     project: Project = ctx["project"]
     top_z = project.envelope.transform.translation.z + project.envelope.size.z / 2.0
     commands.add_slice(
@@ -103,7 +102,7 @@ def _add_front_slice(ctx: dict, name: str) -> None:
     )
 
 
-@when(parsers.parse('I add a horizontal slice named "{name}" further back'))
+@when(parsers.parse('I add a horizontal slice named "{name}" nearer the front face'))
 def _add_second_slice(ctx: dict, name: str) -> None:
     project: Project = ctx["project"]
     top_z = project.envelope.transform.translation.z + project.envelope.size.z / 2.0
@@ -115,9 +114,13 @@ def _add_second_slice(ctx: dict, name: str) -> None:
     )
 
 
-@when("the project is generated again with slicing enabled")
-def _generate_second(ctx: dict) -> None:
-    commands.configure_slicing(ctx["project"], enabled=True)
+@when(
+    parsers.parse(
+        'the project is generated again with slicing enabled, leaving a "{remainder}"'
+    )
+)
+def _generate_second(ctx: dict, remainder: str) -> None:
+    commands.configure_slicing(ctx["project"], enabled=True, remainder_name=remainder)
     ctx["generated"] = generate(ctx["project"], ctx["repository"])
 
 

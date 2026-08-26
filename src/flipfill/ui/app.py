@@ -1059,7 +1059,13 @@ class FlipFillApp:
         if not selection:
             return
         index = int(selection[0])
-        commands.remove_slice(self.project, self.project.slicing.slices[index].name)
+        # The tree row index is authoritative here; passing the slice's name
+        # would let a slice literally named "2" resolve as index 2.
+        try:
+            commands.remove_slice(self.project, str(index))
+        except CommandError as exc:
+            messagebox.showerror("Invalid slice", str(exc), parent=self.root)
+            return
         self._mark_dirty()
         self._invalidate_generation()
         self.refresh_slice_tree()
@@ -1069,14 +1075,15 @@ class FlipFillApp:
         if not selection:
             return
         index = int(selection[0])
-        name = self.project.slicing.slices[index].name
-        commands.reorder_slice(self.project, name, index + offset)
+        try:
+            commands.reorder_slice(self.project, str(index), index + offset)
+        except CommandError as exc:
+            messagebox.showerror("Invalid slice", str(exc), parent=self.root)
+            return
         self._mark_dirty()
         self._invalidate_generation()
         self.refresh_slice_tree()
-        new_index = next(
-            i for i, s in enumerate(self.project.slicing.slices) if s.name == name
-        )
+        new_index = max(0, min(index + offset, len(self.project.slicing.slices) - 1))
         self.slice_tree.selection_set(str(new_index))
 
     def apply_slice_row(self) -> None:
@@ -1085,9 +1092,33 @@ class FlipFillApp:
             self.add_slice_row()
             return
         index = int(selection[0])
-        name = self.project.slicing.slices[index].name
-        commands.remove_slice(self.project, name)
-        self.add_slice_row(index=index)
+        try:
+            commands.update_slice(
+                self.project,
+                str(index),
+                name=self.slice_name.get() or None,
+                cutter_kind=SliceCutterKind(self.slice_cutter_kind.get()),
+                transform=Transform(
+                    translation=Vector3(
+                        self._float(self.slice_x, "Plane X"),
+                        self._float(self.slice_y, "Plane Y"),
+                        self._float(self.slice_z, "Plane Z"),
+                    ),
+                    rotation_deg=Vector3(
+                        self._float(self.slice_rx, "Plane rotate X"),
+                        self._float(self.slice_ry, "Plane rotate Y"),
+                        self._float(self.slice_rz, "Plane rotate Z"),
+                    ),
+                ),
+                gap=max(0.0, self._float(self.slice_gap, "Kerf gap")),
+                object_id=self.slice_object_ref.get() or None,
+            )
+        except (CommandError, ValueError) as exc:
+            messagebox.showerror("Invalid slice", str(exc), parent=self.root)
+            return
+        self._mark_dirty()
+        self._invalidate_generation()
+        self.refresh_slice_tree()
 
     def _apply_slicing_controls(self) -> None:
         commands.configure_slicing(
@@ -1306,8 +1337,16 @@ class FlipFillApp:
             export_fitcheck_assembly(
                 self.project, generated, output / f"{safe_name}_fitcheck.step"
             )
+            seen_slugs: dict[str, int] = {}
             for name, shape in generated.sliced_bodies.items():
-                export_shape(shape, output / f"{safe_name}_{self._slugify_body_name(name)}.step")
+                # Distinct body names can slugify identically ("Top"/"top");
+                # suffix later collisions so no file silently overwrites another.
+                slug = self._slugify_body_name(name)
+                count = seen_slugs.get(slug, 0) + 1
+                seen_slugs[slug] = count
+                if count > 1:
+                    slug = f"{slug}_{count}"
+                export_shape(shape, output / f"{safe_name}_{slug}.step")
             save_project(self.project, output / f"{safe_name}.flipfill.json")
             self.viewport.save_screenshot(output / f"{safe_name}_preview.png")
         except Exception as exc:

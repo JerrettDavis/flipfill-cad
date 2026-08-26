@@ -468,6 +468,57 @@ def remove_slice(project: Project, name_or_index: str) -> None:
     del project.slicing.slices[index]
 
 
+def update_slice(
+    project: Project,
+    name_or_index: str,
+    *,
+    name: str | None = None,
+    cutter_kind: SliceCutterKind | None = None,
+    transform: Transform | None = None,
+    gap: float | None = None,
+    object_id: str | None = None,
+) -> SliceSpec:
+    """Replace one slice in place, validating before mutating so a failed
+    edit never removes the original. Any parameter left as None keeps the
+    existing slice's current value for that field."""
+
+    index = _find_slice_index(project, name_or_index)
+    current = project.slicing.slices[index]
+
+    resolved_name = name if name is not None else current.name
+    if resolved_name != current.name:
+        validated_name = _validate_slice_name(project, resolved_name, ignore_index=index)
+    else:
+        validated_name = current.name
+
+    resolved_kind = cutter_kind if cutter_kind is not None else current.cutter_kind
+    resolved_gap = gap if gap is not None else current.gap
+    if resolved_gap < 0:
+        raise CommandError("Slice gap must be zero or positive")
+
+    if resolved_kind is SliceCutterKind.OBJECT:
+        if resolved_gap != 0:
+            raise CommandError("Gap only applies to plane cutters")
+        resolved_object_id = object_id if object_id is not None else current.object_id
+        if not resolved_object_id:
+            raise CommandError("An object cutter requires an object id or name")
+        resolved_object = find_object(project, resolved_object_id)
+        updated = SliceSpec(
+            name=validated_name, cutter_kind=resolved_kind, object_id=resolved_object.id
+        )
+    else:
+        resolved_transform = transform if transform is not None else current.transform
+        updated = SliceSpec(
+            name=validated_name,
+            cutter_kind=resolved_kind,
+            transform=resolved_transform,
+            gap=resolved_gap,
+        )
+
+    project.slicing.slices[index] = updated
+    return updated
+
+
 def reorder_slice(project: Project, name_or_index: str, new_index: int) -> None:
     slices = project.slicing.slices
     index = _find_slice_index(project, name_or_index)

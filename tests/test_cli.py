@@ -380,6 +380,25 @@ def test_generate_validate_and_export(tmp_path: Path) -> None:
     assert export_path.exists() and export_path.stat().st_size > 0
 
 
+def test_generate_disambiguates_colliding_slice_slugs(tmp_path: Path) -> None:
+    project_path = tmp_path / "demo.flipfill.json"
+    main(["new", str(project_path)])
+    main(["slice", str(project_path), "add", "--name", "Top", "--plane", "--at-z", "-4"])
+    main(["slice", str(project_path), "add", "--name", "top", "--plane", "--at-z", "4"])
+    assert main(["slice", str(project_path), "enable"]) == 0
+
+    slice_dir = tmp_path / "slices"
+    output = tmp_path / "out.step"
+    assert main(
+        ["generate", str(project_path), "-o", str(output), "--slice-dir", str(slice_dir)]
+    ) == 0
+
+    assert (slice_dir / "out_top.step").exists()
+    assert (slice_dir / "out_top_2.step").exists()
+    assert (slice_dir / "out_remainder.step").exists()
+    assert len(list(slice_dir.glob("*.step"))) == 3
+
+
 def test_validate_missing_project_returns_nonzero(tmp_path: Path) -> None:
     code = main(["validate", str(tmp_path / "missing.flipfill.json")])
 

@@ -248,6 +248,32 @@ def test_multi_slice_chain_partitions_whole_volume() -> None:
     )
 
 
+def test_plane_slice_reaches_a_body_far_from_the_plane_origin() -> None:
+    project = Project()
+    project.envelope.kind = PrimitiveKind.BOX
+    project.envelope.size = Vector3(20, 20, 20)
+    project.envelope.transform = Transform(Vector3(500, 0, 100))
+    project.slicing.enabled = True
+    project.slicing.slices.append(
+        SliceSpec(
+            name="Bottom",
+            cutter_kind=SliceCutterKind.PLANE,
+            transform=Transform(Vector3(0, 0, 100)),
+        )
+    )
+
+    result = generate(project)
+
+    assert len(result.sliced_bodies) == 2
+    assert set(result.sliced_bodies) == {"Bottom", "Remainder"}
+    for shape in result.sliced_bodies.values():
+        assert shape.isValid()
+        assert shape.Volume() > 0
+    assert sum(shape.Volume() for shape in result.sliced_bodies.values()) == pytest.approx(
+        20 * 20 * 20, rel=1.0e-6
+    )
+
+
 def test_object_cutter_slices_using_scene_object_solid() -> None:
     project = Project()
     project.envelope.kind = PrimitiveKind.BOX

@@ -44,7 +44,7 @@ Loads and saves schema-versioned JSON. Relative source paths are resolved agains
 
 ### `flipfill.commands`
 
-The application service layer shared by every front end: `create_project`, `open_project`, `find_object`, `import_geometry`, `list_objects`/`inspect_object`, `move_object`/`rotate_object`, `align_object`, `set_role`/`set_clearance`, `add_primitive_object`, `configure_envelope`/`fit_envelope`, `configure_slicing`/`add_slice`/`remove_slice`/`reorder_slice`/`list_slices`, and `run_doctor`. Every function operates on plain `flipfill.model` types, performs no console I/O, and raises `CommandError` for user-facing problems -- so it is unit-testable directly and there is exactly one place that knows how to, say, resolve an object reference or align a bounding-box edge. `cli.py` is the only consumer today; the desktop UI is the next one, closing the last GUI/CLI logic duplication (scene mutation, not just rendering).
+The application service layer shared by every front end: `create_project`, `open_project`, `find_object`, `import_geometry`, `list_objects`/`inspect_object`, `move_object`/`rotate_object`, `align_object`, `set_role`/`set_clearance`, `add_primitive_object`, `configure_envelope`/`fit_envelope`, `configure_slicing`/`add_slice`/`remove_slice`/`reorder_slice`/`list_slices`, and `run_doctor`. Every function operates on plain `flipfill.model` types, performs no console I/O, and raises `CommandError` for user-facing problems -- so it is unit-testable directly and there is exactly one place that knows how to, say, resolve an object reference or align a bounding-box edge. `cli.py` consumes it throughout, and the desktop UI now calls it for slice management as well, closing that GUI/CLI logic duplication (scene mutation, not just rendering); the UI's remaining object and envelope editing is the next candidate to move behind it.
 
 ### `flipfill.geometry.align`
 
@@ -97,7 +97,7 @@ Coordinates user interaction, scene state, generation, reporting, and export.
 
 ## Dependency direction
 
-The domain model has no dependency on CadQuery, VTK, Tk, or Trimesh. Geometry depends on the model. `commands` depends on geometry and the model. The CLI depends on `commands`. UI depends on geometry and rendering directly today (see `commands` above); it does not, and should not, re-implement geometry math. The core never calls the UI.
+The domain model has no dependency on CadQuery, VTK, Tk, or Trimesh. Geometry depends on the model. `commands` depends on geometry and the model. The CLI depends on `commands`. The UI depends on `commands` for slice management and on geometry and rendering directly for the rest (see `commands` above); it does not, and should not, re-implement geometry math. The core never calls the UI.
 
 ## Extensibility seams
 
