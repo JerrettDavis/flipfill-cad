@@ -68,12 +68,33 @@ The 0.1 envelope is a box or an XY rounded rectangle extruded through Z. Auto-fi
 
 Auto-fit is intentionally axis-aligned and resets envelope rotation to zero. Manual envelope rotation remains available after fitting, but a rotated envelope should be checked carefully because automatic local-coordinate fitting is not yet implemented.
 
+## Slicing
+
+`Project.slicing` holds an ordered list of cuts applied to the generated
+body after fit/fuse/cut/validate. Each cut ("slice") is either:
+
+- a **plane cutter** — an arbitrarily positioned and oriented plane. The
+  side of the plane on its local -Z carves off a named piece; local +Z
+  continues to the next cut, or becomes the final "remainder" piece if
+  there are no more cuts. An optional `gap` (mm) removes a thin kerf slab
+  centered on the plane, belonging to neither piece; or
+- an **object cutter** — an existing scene object's resolved solid
+  (BRep or primitive; not mesh-only) used directly as the cutting tool.
+  The object is intersected with, then cut from, the running remainder.
+
+N slices produce N+1 named bodies. Names must be unique and distinct from
+the configured remainder name. Slicing runs after validation and is
+independent of it: a slice failure (an empty piece, a dangling object
+reference, a mesh-only object cutter) raises a generation error naming
+the offending slice.
+
 ## Generation order
 
 ```text
 base = envelope
 positive = fuse(base, every additive)
 result = cut(positive, every occupant cavity, every cutout blocker)
+sliced_bodies = slice(result, every configured cut)  # when slicing is enabled
 ```
 
 Booleans use the project's tolerance. The resulting shape is cleaned and checked for validity.
@@ -86,7 +107,7 @@ Booleans use the project's tolerance. The resulting shape is cleaned and checked
 - An occupant extending outside the envelope is reported.
 - Occupant clearances with positive-volume overlap are reported.
 - A cutout that does not intersect the envelope is reported.
-- Split halves must both be nonempty valid shapes.
+- Sliced bodies must all be nonempty valid shapes.
 
 ## Why blockers matter
 

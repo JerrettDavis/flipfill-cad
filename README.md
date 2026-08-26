@@ -36,11 +36,11 @@ This is not a mesh sculpting trick. The engine uses CadQuery and OpenCascade bou
 - Adds bosses, pads, ribs, and other positive geometry with additive primitives or imported solids.
 - Generates and validates the inverse-fill body.
 - Detects residual enclosure/cavity intersections and overlapping occupant clearances.
-- Optionally splits the result along X, Y, or Z.
+- Optionally slices the result into N named bodies along plane or object cutters.
 - Exports:
   - generated STEP;
   - printable STL;
-  - optional split-half STEP files;
+  - optional per-slice STEP files;
   - a **fit-check STEP assembly** containing the result plus positioned hardware; and
   - the plain-JSON project file.
 - Runs through a fully scriptable headless CLI (17 commands, `--json` output, meaningful exit codes) or the desktop GUI — see [CLI reference](#cli-reference).
@@ -95,14 +95,14 @@ kept as ordinary adjacent files.
 .venv\Scripts\python -m flipfill gui examples\portable_monitor_demo.flipfill.json
 ```
 
-The example contains a simplified 3.5-inch display module, battery, speaker, screen opening, USB-C access, button access, speaker opening, lanyard channel, auto-fitted rounded envelope, and Z split.
+The example contains a simplified 3.5-inch display module, battery, speaker, screen opening, USB-C access, button access, speaker opening, lanyard channel, auto-fitted rounded envelope, and a plane slice into bottom and top shells.
 
 Pre-generated example outputs are under `examples/`:
 
 - `portable_monitor_demo.step`
 - `portable_monitor_demo_fitcheck.step`
-- `portable_monitor_demo_A.step`
-- `portable_monitor_demo_B.step`
+- `portable_monitor_demo_bottom_shell.step`
+- `portable_monitor_demo_top_shell.step`
 
 ## Desktop workflow
 
@@ -171,8 +171,9 @@ flipfill import my_case.flipfill.json battery.step --role occupant --clearance 0
 flipfill move my_case.flipfill.json Battery --x 0 --y 0 --z 4
 flipfill blocker my_case.flipfill.json --role cutout --kind box --size 10 6 6 --at-x 20 --at-y 0 --at-z 0
 flipfill envelope my_case.flipfill.json --fit --margin 3 3 3
-flipfill split my_case.flipfill.json --enable --axis z --offset 1.5 --gap 0.35
-flipfill generate my_case.flipfill.json -o out/case.step --fitcheck out/case_fitcheck.step --split-dir out
+flipfill slice my_case.flipfill.json add --name "Bottom" --plane --at-z 1.5 --gap 0.35
+flipfill slice my_case.flipfill.json enable
+flipfill generate my_case.flipfill.json -o out/case.step --fitcheck out/case_fitcheck.step --slice-dir out
 flipfill validate my_case.flipfill.json --json
 flipfill render my_case.flipfill.json out/preview.png --view iso
 flipfill doctor
@@ -192,8 +193,8 @@ Run `flipfill <command> --help` for a command's full options and examples. The f
 | `clearance` | Set an object's clearance mode and/or distance |
 | `blocker` | Add a primitive occupant, cutout blocker, or additive |
 | `envelope` | Configure or auto-fit the enclosure envelope |
-| `split` | Configure the planar split applied during generate/export |
-| `generate` | Run the full pipeline and export the generated body (+ fit-check + split) |
+| `slice` | Manage the ordered slice/cut list applied during generate/export |
+| `generate` | Run the full pipeline and export the generated body (+ fit-check + slice) |
 | `validate` | Run geometric validation without exporting |
 | `export` | Generate and export a single artifact: STEP, STL, fit-check, or a full package |
 | `render` | Render a PNG preview without a desktop session (headless, CI-friendly) |
@@ -212,7 +213,7 @@ This makes the same geometry engine usable in CI, regression tests, scripted pro
 - primitive parameters;
 - clearances;
 - envelope parameters;
-- split settings; and
+- slicing settings; and
 - numerical tolerances.
 
 Source paths under the project directory are saved relatively. External files remain absolute. A project-bundling workflow is planned.
@@ -222,7 +223,7 @@ Source paths under the project directory are saved relatively. External files re
 - Mesh formats are visual/reference inputs and use bounding-box proxies for BRep Booleans. They are not magically converted into clean parametric solids.
 - OpenCascade 3D offsets can fail on complex or low-continuity imported topology. FlipFill reports the failure and uses AABB clearance instead of silently producing a bad cavity.
 - Auto-fit is axis-aligned. Oriented bounding boxes and arbitrary sketched envelopes are planned.
-- Planar split is implemented, but tongue-and-groove seams, screw bosses, heat-set insert placement, snap fits, and hinge generators are roadmap work.
+- Slicing supports plane and object cutters; tongue-and-groove seams, screw bosses, heat-set insert placement, snap fits, and hinge generators are roadmap work. Spline/sketch-curve cutting surfaces and a viewport plane gizmo are also roadmap work (see docs/ROADMAP.md).
 - Minimum wall thickness is not yet sampled across the entire body. Envelope margin and clearance values remain design inputs, not a substitute for final engineering review.
 - Imported STEP assembly names/colors are currently flattened into a scene object. Assembly-tree preservation is planned.
 

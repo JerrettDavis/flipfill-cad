@@ -6,9 +6,15 @@ Delivered ahead of the 0.2 items below, because a scriptable CLI is the
 primary interface and was the biggest usability gap:
 
 - Full CLI command surface: `new`, `import`, `list`, `inspect`, `move`,
-  `rotate`, `align`, `role`, `clearance`, `blocker`, `envelope`, `split`,
+  `rotate`, `align`, `role`, `clearance`, `blocker`, `envelope`, `slice`,
   `generate`, `validate`, `export`, `render`, `doctor`, `gui`. Every command
   supports `--json` and returns a meaningful exit code.
+- Replaced the single two-body axis-aligned `split` command with an
+  ordered, named, N-body `slice` command: plane cutters (arbitrary
+  position/orientation, optional kerf gap) or existing scene objects used
+  as cutting solids. Wired through the CLI, `flipfill.commands`, the
+  generation engine, the desktop UI, the shipped example, and a new
+  `pytest-bdd` end-to-end scenario.
 - `flipfill.commands`: an application service layer shared by the CLI (and
   the next thing to wire into the GUI) so scene-mutation logic — not just
   rendering — has one implementation instead of one per front end.
@@ -55,7 +61,7 @@ Delivered in this repository:
 - create blockers/additives;
 - inverse fill;
 - validate;
-- split;
+- slicing;
 - export STEP/STL and fit-check assembly;
 - save projects;
 - desktop and headless execution.
@@ -67,6 +73,10 @@ Delivered in this repository:
 - Add transform gizmo and snap increments.
 - Add align, distribute, mate-face, center-to-center, and surface-offset commands.
 - Add convex-hull cavity mode (oriented bounding box shipped ahead of 0.2 — see above).
+- Spline/sketch-curve cutting surfaces for the slice tool (needs a new
+  2D sketch/spline model entity that does not exist yet).
+- A viewport plane gizmo for the slice tool (currently numeric entry
+  only, matching the envelope panel).
 - Add cable sweep/path blockers and battery swelling profiles.
 - Add local-coordinate envelope fitting.
 - Move expensive operations into cancellable workers.
@@ -108,7 +118,7 @@ Delivered in this repository:
 
 ## 1.0 criteria
 
-- A complete enclosure can be generated, split, fastened, validated, and exported without downstream CAD for common rectangular electronics projects.
+- A complete enclosure can be generated, sliced, fastened, validated, and exported without downstream CAD for common rectangular electronics projects.
 - Every generated feature is represented in a deterministic project history.
 - Kernel failures are diagnosable and recoverable.
 - Windows, Linux, and macOS packages are reproducible and signed.

@@ -7,21 +7,25 @@ The release includes tests for:
 - project serialization round-trip (`test_model.py`);
 - primitive validity and dimensions, negative-dimension rejection (`test_primitives.py`);
 - inverse-fill volume, AABB/offset/exact clearance, exterior cutout behavior,
-  additive fusion, envelope fit and margins, planar split volume and
-  validity, occupant-overlap warning (`test_generator.py`);
+  additive fusion, envelope fit and margins, plane and object slice-cutter
+  volume and validity, occupant-overlap warning (`test_generator.py`);
 - relative project paths, STEP import/generation/export/reimport,
   fit-check assembly export, mesh import with AABB Boolean proxy
   (`test_io_and_export.py`);
 - every CLI command (`new` through `doctor`) including `--json` output
   shape and nonzero exit codes on failure (`test_cli.py`);
 - a true end-to-end workflow driven only through the CLI — create, import,
-  position, classify, block, fit, split, validate zero unintended
+  position, classify, block, fit, slice, validate zero unintended
   intersections, generate, export, reopen, reimport and verify every
   artifact (`test_e2e.py`);
-- a deterministic golden regression test pinning the generated/split
+- a deterministic golden regression test pinning the generated/sliced
   volumes of the shipped `portable_monitor_demo` example (`test_golden.py`);
 - malformed project JSON, unsupported schema versions, unknown enum
-  values, and other error paths (`test_errors.py`).
+  values, and other error paths (`test_errors.py`);
+- a Gherkin/`pytest-bdd` end-to-end scenario for the slice tool
+  (`tests/features/slicing.feature`, `tests/test_slicing_bdd.py`),
+  driven through `flipfill.commands` exactly like `test_e2e.py` drives
+  the CLI — no mocking.
 
 Every test performs real geometry operations. No CAD-kernel behavior is mocked.
 
@@ -78,7 +82,7 @@ For generated outputs, store and compare:
 - area;
 - bounding box;
 - cavity intersection volumes;
-- split-half volumes; and
+- sliced-body volumes; and
 - tessellated triangle count within a tolerance band.
 
 STEP files should not be compared byte-for-byte because exporter metadata and entity ordering can change between kernel versions.
@@ -92,7 +96,7 @@ Render fixed cameras for the demo corpus and compare normalized images with a pe
 - blockers;
 - envelope;
 - generated result; and
-- split halves.
+- sliced bodies.
 
 ## Manual release checklist
 

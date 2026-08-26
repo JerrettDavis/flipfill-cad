@@ -2,9 +2,17 @@
 
 ## Unreleased
 
+- **Breaking:** replaced the single two-body axis-aligned `split` command
+  and `Project.split` field with an ordered, named, N-body `slice`
+  command and `Project.slicing` field. Cuts are plane cutters (arbitrary
+  position/orientation, optional kerf gap) or existing scene objects used
+  as cutting solids. Wired through the CLI, `flipfill.commands`, the
+  generation engine (`GenerationResult.sliced_bodies` replaces
+  `split_a`/`split_b`), the desktop UI, the shipped example, and a new
+  `pytest-bdd` Gherkin end-to-end scenario (`tests/features/slicing.feature`).
 - Added the full CLI command surface: `new`, `import`, `list`, `inspect`,
   `move`, `rotate`, `align`, `role`, `clearance`, `blocker`, `envelope`,
-  `split`, `export`, `render`, and `doctor`, alongside the existing
+  `slice`, `export`, `render`, and `doctor`, alongside the existing
   `generate`/`validate`/`gui`. Every command supports `--json` and returns
   a meaningful exit code.
 - Added `flipfill.commands`, an application service layer shared by every
