@@ -7,6 +7,8 @@ from collections.abc import Callable
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from flipfill import commands
+from flipfill.commands import CommandError
 from flipfill.geometry.exporters import export_fitcheck_assembly, export_shape
 from flipfill.geometry.generator import (
     GenerationError,
@@ -22,7 +24,7 @@ from flipfill.model import (
     PrimitiveSpec,
     Project,
     SceneObject,
-    SplitAxis,
+    SliceCutterKind,
     Transform,
     Vector3,
 )
@@ -504,30 +506,86 @@ class FlipFillApp:
     def _build_generate_tab(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(1, weight=1)
         parent.rowconfigure(8, weight=1)
-        self.split_enabled = tk.BooleanVar(value=False)
-        self.split_axis = tk.StringVar(value=SplitAxis.Z.value)
-        self.split_offset = tk.StringVar(value="0")
-        self.split_gap = tk.StringVar(value="0")
+        self.slicing_enabled = tk.BooleanVar(value=False)
+        self.slice_remainder_name = tk.StringVar(value="Remainder")
+        self.slice_name = tk.StringVar(value="")
+        self.slice_cutter_kind = tk.StringVar(value=SliceCutterKind.PLANE.value)
+        self.slice_object_ref = tk.StringVar(value="")
+        self.slice_x = tk.StringVar(value="0")
+        self.slice_y = tk.StringVar(value="0")
+        self.slice_z = tk.StringVar(value="0")
+        self.slice_rx = tk.StringVar(value="0")
+        self.slice_ry = tk.StringVar(value="0")
+        self.slice_rz = tk.StringVar(value="0")
+        self.slice_gap = tk.StringVar(value="0")
 
-        ttk.Label(parent, text="Output split", style="Section.TLabel").grid(
+        ttk.Label(parent, text="Slices", style="Section.TLabel").grid(
             row=0, column=0, columnspan=2, sticky=tk.W
         )
-        ttk.Checkbutton(parent, text="Generate two halves", variable=self.split_enabled).grid(
-            row=1, column=0, columnspan=2, sticky=tk.W, pady=3
-        )
-        ttk.Label(parent, text="Axis").grid(row=2, column=0, sticky=tk.W, pady=2)
-        ttk.Combobox(
+        ttk.Checkbutton(
+            parent, text="Enable slicing on generate", variable=self.slicing_enabled
+        ).grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=3)
+
+        self.slice_tree = ttk.Treeview(
             parent,
-            textvariable=self.split_axis,
-            values=[axis.value for axis in SplitAxis],
+            columns=("name", "kind", "summary"),
+            show="headings",
+            height=5,
+            selectmode="browse",
+        )
+        self.slice_tree.heading("name", text="Name")
+        self.slice_tree.heading("kind", text="Cutter")
+        self.slice_tree.heading("summary", text="Summary")
+        self.slice_tree.column("name", width=110)
+        self.slice_tree.column("kind", width=60)
+        self.slice_tree.column("summary", width=140)
+        self.slice_tree.grid(row=2, column=0, columnspan=2, sticky=tk.NSEW, pady=(4, 4))
+        self.slice_tree.bind("<<TreeviewSelect>>", self._slice_tree_selected)
+
+        list_buttons = ttk.Frame(parent)
+        list_buttons.grid(row=3, column=0, columnspan=2, sticky=tk.EW)
+        ttk.Button(list_buttons, text="Add", command=self.add_slice_row).pack(side=tk.LEFT)
+        ttk.Button(list_buttons, text="Remove", command=self.remove_slice_row).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(list_buttons, text="Move Up", command=lambda: self.move_slice_row(-1)).pack(
+            side=tk.LEFT
+        )
+        ttk.Button(list_buttons, text="Move Down", command=lambda: self.move_slice_row(1)).pack(
+            side=tk.LEFT, padx=4
+        )
+
+        editor = ttk.Frame(parent)
+        editor.grid(row=4, column=0, columnspan=2, sticky=tk.EW, pady=(8, 0))
+        editor.columnconfigure(1, weight=1)
+        self._entry_row(editor, 0, "Name", self.slice_name)
+        ttk.Label(editor, text="Cutter").grid(row=1, column=0, sticky=tk.W, padx=(0, 6), pady=2)
+        ttk.Combobox(
+            editor,
+            textvariable=self.slice_cutter_kind,
+            values=[kind.value for kind in SliceCutterKind],
             state="readonly",
-            width=8,
-        ).grid(row=2, column=1, sticky=tk.W, pady=2)
-        self._entry_row(parent, 3, "Plane offset", self.split_offset)
-        self._entry_row(parent, 4, "Separation gap", self.split_gap)
+            width=10,
+        ).grid(row=1, column=1, sticky=tk.W, pady=2)
+        self._entry_row(editor, 2, "Object (id or name)", self.slice_object_ref)
+        self._entry_row(editor, 3, "Plane X", self.slice_x)
+        self._entry_row(editor, 4, "Plane Y", self.slice_y)
+        self._entry_row(editor, 5, "Plane Z", self.slice_z)
+        self._entry_row(editor, 6, "Plane rotate X", self.slice_rx)
+        self._entry_row(editor, 7, "Plane rotate Y", self.slice_ry)
+        self._entry_row(editor, 8, "Plane rotate Z", self.slice_rz)
+        self._entry_row(editor, 9, "Kerf gap", self.slice_gap)
+        ttk.Button(editor, text="Apply Row", command=self.apply_slice_row).grid(
+            row=10, column=0, columnspan=2, sticky=tk.W, pady=(6, 0)
+        )
+
+        ttk.Label(parent, text="Remainder name").grid(row=5, column=0, sticky=tk.W, pady=(8, 2))
+        ttk.Entry(parent, textvariable=self.slice_remainder_name).grid(
+            row=5, column=1, sticky=tk.EW, pady=(8, 2)
+        )
 
         buttons = ttk.Frame(parent)
-        buttons.grid(row=5, column=0, columnspan=2, sticky=tk.EW, pady=(10, 4))
+        buttons.grid(row=6, column=0, columnspan=2, sticky=tk.EW, pady=(10, 4))
         ttk.Button(buttons, text="Generate", command=self.generate_model).pack(side=tk.LEFT)
         ttk.Button(buttons, text="Validate", command=self.validate_model).pack(
             side=tk.LEFT, padx=4
@@ -537,7 +595,7 @@ class FlipFillApp:
         )
 
         ttk.Label(parent, text="Generation report", style="Section.TLabel").grid(
-            row=6, column=0, columnspan=2, sticky=tk.W, pady=(8, 3)
+            row=7, column=0, columnspan=2, sticky=tk.W, pady=(8, 3)
         )
         log_frame = ttk.Frame(parent)
         log_frame.grid(row=8, column=0, columnspan=2, sticky=tk.NSEW)
@@ -616,6 +674,11 @@ class FlipFillApp:
             return float(value.get().strip())
         except ValueError as exc:
             raise ValueError(f"{label} must be a number") from exc
+
+    @staticmethod
+    def _slugify_body_name(name: str) -> str:
+        slug = "".join(c.lower() if c.isalnum() else "_" for c in name).strip("_")
+        return slug or "body"
 
     def _selected_scene_objects(self) -> list[SceneObject]:
         ids = set(self.tree.selection())
@@ -930,11 +993,108 @@ class FlipFillApp:
         self._invalidate_generation()
         self.refresh_view()
 
-    def _apply_split_controls(self) -> None:
-        self.project.split.enabled = bool(self.split_enabled.get())
-        self.project.split.axis = SplitAxis(self.split_axis.get())
-        self.project.split.offset = self._float(self.split_offset, "Split offset")
-        self.project.split.gap = max(0.0, self._float(self.split_gap, "Split gap"))
+    def _slice_tree_selected(self, _event=None) -> None:
+        selection = self.slice_tree.selection()
+        if not selection:
+            return
+        index = int(selection[0])
+        slice_spec = self.project.slicing.slices[index]
+        self.slice_name.set(slice_spec.name)
+        self.slice_cutter_kind.set(slice_spec.cutter_kind.value)
+        self.slice_object_ref.set(slice_spec.object_id or "")
+        self.slice_x.set(str(slice_spec.transform.translation.x))
+        self.slice_y.set(str(slice_spec.transform.translation.y))
+        self.slice_z.set(str(slice_spec.transform.translation.z))
+        self.slice_rx.set(str(slice_spec.transform.rotation_deg.x))
+        self.slice_ry.set(str(slice_spec.transform.rotation_deg.y))
+        self.slice_rz.set(str(slice_spec.transform.rotation_deg.z))
+        self.slice_gap.set(str(slice_spec.gap))
+
+    def refresh_slice_tree(self) -> None:
+        self.slice_tree.delete(*self.slice_tree.get_children())
+        for index, slice_spec in enumerate(self.project.slicing.slices):
+            if slice_spec.cutter_kind is SliceCutterKind.PLANE:
+                summary = (
+                    f"z={slice_spec.transform.translation.z:.2f} gap={slice_spec.gap:.2f}"
+                )
+            else:
+                target = self.project.object_by_id(slice_spec.object_id or "")
+                summary = f"object: {target.name if target else slice_spec.object_id}"
+            self.slice_tree.insert(
+                "", tk.END, iid=str(index),
+                values=(slice_spec.name, slice_spec.cutter_kind.value, summary),
+            )
+
+    def add_slice_row(self, index: int | None = None) -> None:
+        try:
+            commands.add_slice(
+                self.project,
+                name=self.slice_name.get() or f"Slice {len(self.project.slicing.slices) + 1}",
+                cutter_kind=SliceCutterKind(self.slice_cutter_kind.get()),
+                transform=Transform(
+                    translation=Vector3(
+                        self._float(self.slice_x, "Plane X"),
+                        self._float(self.slice_y, "Plane Y"),
+                        self._float(self.slice_z, "Plane Z"),
+                    ),
+                    rotation_deg=Vector3(
+                        self._float(self.slice_rx, "Plane rotate X"),
+                        self._float(self.slice_ry, "Plane rotate Y"),
+                        self._float(self.slice_rz, "Plane rotate Z"),
+                    ),
+                ),
+                gap=max(0.0, self._float(self.slice_gap, "Kerf gap")),
+                object_id=self.slice_object_ref.get() or None,
+                index=index,
+            )
+        except (CommandError, ValueError) as exc:
+            messagebox.showerror("Invalid slice", str(exc), parent=self.root)
+            return
+        self._mark_dirty()
+        self._invalidate_generation()
+        self.refresh_slice_tree()
+
+    def remove_slice_row(self) -> None:
+        selection = self.slice_tree.selection()
+        if not selection:
+            return
+        index = int(selection[0])
+        commands.remove_slice(self.project, self.project.slicing.slices[index].name)
+        self._mark_dirty()
+        self._invalidate_generation()
+        self.refresh_slice_tree()
+
+    def move_slice_row(self, offset: int) -> None:
+        selection = self.slice_tree.selection()
+        if not selection:
+            return
+        index = int(selection[0])
+        name = self.project.slicing.slices[index].name
+        commands.reorder_slice(self.project, name, index + offset)
+        self._mark_dirty()
+        self._invalidate_generation()
+        self.refresh_slice_tree()
+        new_index = next(
+            i for i, s in enumerate(self.project.slicing.slices) if s.name == name
+        )
+        self.slice_tree.selection_set(str(new_index))
+
+    def apply_slice_row(self) -> None:
+        selection = self.slice_tree.selection()
+        if not selection:
+            self.add_slice_row()
+            return
+        index = int(selection[0])
+        name = self.project.slicing.slices[index].name
+        commands.remove_slice(self.project, name)
+        self.add_slice_row(index=index)
+
+    def _apply_slicing_controls(self) -> None:
+        commands.configure_slicing(
+            self.project,
+            enabled=bool(self.slicing_enabled.get()),
+            remainder_name=self.slice_remainder_name.get() or None,
+        )
 
     def _apply_current_panel_if_possible(self) -> None:
         current = self.notebook.index(self.notebook.select())
@@ -943,7 +1103,7 @@ class FlipFillApp:
         elif current == 1:
             self.apply_envelope_properties()
         elif current == 2:
-            self._apply_split_controls()
+            self._apply_slicing_controls()
 
     # ------------------------------------------------------------------
     # Envelope and generation
@@ -985,7 +1145,7 @@ class FlipFillApp:
     def generate_model(self) -> GenerationResult | None:
         try:
             self._apply_current_panel_if_possible()
-            self._apply_split_controls()
+            self._apply_slicing_controls()
             generated = generate(self.project, self.repository)
         except GenerationError as exc:
             self.generated = None
@@ -999,6 +1159,7 @@ class FlipFillApp:
             return None
 
         self.generated = generated
+        self.refresh_slice_tree()
         self._display_generation_report(generated)
         self.refresh_scene_tree()
         self.refresh_view(fit=True)
@@ -1056,12 +1217,12 @@ class FlipFillApp:
                 f"{message.level.value.upper()}{object_name}: {message.message}\n",
                 message.level.value,
             )
-        if generated.split_a is not None and generated.split_b is not None:
-            self._write_log(
-                f"\nSplit A volume: {generated.split_a.Volume():.3f} mm³\n"
-                f"Split B volume: {generated.split_b.Volume():.3f} mm³\n",
-                "info",
+        if generated.sliced_bodies:
+            lines = "".join(
+                f"{name} volume: {shape.Volume():.3f} mm³\n"
+                for name, shape in generated.sliced_bodies.items()
             )
+            self._write_log(f"\n{lines}", "info")
 
     # ------------------------------------------------------------------
     # Export
@@ -1145,9 +1306,8 @@ class FlipFillApp:
             export_fitcheck_assembly(
                 self.project, generated, output / f"{safe_name}_fitcheck.step"
             )
-            if generated.split_a is not None and generated.split_b is not None:
-                export_shape(generated.split_a, output / f"{safe_name}_A.step")
-                export_shape(generated.split_b, output / f"{safe_name}_B.step")
+            for name, shape in generated.sliced_bodies.items():
+                export_shape(shape, output / f"{safe_name}_{self._slugify_body_name(name)}.step")
             save_project(self.project, output / f"{safe_name}.flipfill.json")
             self.viewport.save_screenshot(output / f"{safe_name}_preview.png")
         except Exception as exc:
@@ -1308,15 +1468,22 @@ class FlipFillApp:
         ):
             variable.set(f"{value:g}")
 
-    def _load_split_controls(self) -> None:
-        self.split_enabled.set(self.project.split.enabled)
-        self.split_axis.set(self.project.split.axis.value)
-        self.split_offset.set(f"{self.project.split.offset:g}")
-        self.split_gap.set(f"{self.project.split.gap:g}")
+    def _load_slicing_controls(self) -> None:
+        self.slicing_enabled.set(self.project.slicing.enabled)
+        self.slice_remainder_name.set(self.project.slicing.remainder_name)
+        self.slice_name.set("")
+        self.slice_cutter_kind.set(SliceCutterKind.PLANE.value)
+        self.slice_object_ref.set("")
+        for var in (
+            self.slice_x, self.slice_y, self.slice_z,
+            self.slice_rx, self.slice_ry, self.slice_rz, self.slice_gap,
+        ):
+            var.set("0")
+        self.refresh_slice_tree()
 
     def _sync_all_controls(self) -> None:
         self._load_envelope_controls()
-        self._load_split_controls()
+        self._load_slicing_controls()
 
     # ------------------------------------------------------------------
     # View and reporting
