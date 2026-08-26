@@ -64,6 +64,12 @@ class SliceSpec:
     # local +Z is the side that continues to the next cut (or becomes the
     # remainder); local -Z is carved off and named `name`.
     transform: Transform = field(default_factory=Transform)
+    # Plane cutter only: kerf width in mm, like today's SplitSpec.gap — a
+    # slab of this width, centered on the plane, is removed entirely
+    # (belongs to neither the carved piece nor the remainder). Must be 0
+    # for an object cutter (the object's own geometry defines the
+    # separation instead).
+    gap: float = 0.0
     # Object cutter: id of an existing SceneObject used as the cutting
     # solid. Must resolve to BRep geometry (mesh-only objects are
     # rejected the same way mesh objects are rejected as additives today).
@@ -105,21 +111,40 @@ Validation invariants enforced at the `SliceSpec`/`SlicingSpec` level (in
 
 ## Generation algorithm (`flipfill/geometry/generator.py`)
 
-Both cutter kinds resolve to a single "knife" solid; slicing is then a
+Both cutter kinds resolve to one or two "knife" solids; slicing is then a
 sequential intersect/cut fold over `generated.result`, replacing
-`split_shape`:
+`split_shape`. A plane cutter needs *two* knives (one for the isolated
+piece, one for what's removed from the remainder) to reproduce today's
+kerf/gap behavior; an object cutter needs only one (its own geometry is
+the separation):
 
 ```python
-def _plane_knife(transform: Transform, bounds: Bounds3D) -> cq.Shape:
-    # Large box in the plane's local frame, extending in -Z, padded to the
-    # bounds diagonal — the same padding approach split_shape already uses,
-    # generalized from an axis-aligned box to an arbitrarily oriented one
-    # via make_primitive(BOX, transform), the same pattern
-    # _obb_clearance_from_vertices already uses for OBB clearance.
-    ...
+def _local_box(size_x: float, size_y: float, z_min: float, z_max: float) -> cq.Shape:
+    """A box spanning [-size_x/2, size_x/2] x [-size_y/2, size_y/2] x
+    [z_min, z_max] in local coordinates, ready to be positioned by a
+    Transform via transform_shape — used to build a knife whose z=0
+    plane is the cutter's own plane, before it is rotated/translated
+    into world space."""
+    size_z = z_max - z_min
+    box = cq.Workplane("XY").box(size_x, size_y, size_z, centered=True).val()
+    return box.translate((0.0, 0.0, (z_min + z_max) / 2.0))
 
-def _object_knife(slice_spec: SliceSpec, repository, project) -> cq.Shape:
-    resolved = repository.resolve(project.object_by_id(slice_spec.object_id))
+
+def _plane_knives(transform: Transform, gap: float, bounds: Bounds3D) -> tuple[cq.Shape, cq.Shape]:
+    # Padded to the bounds diagonal, the same trick split_shape already
+    # uses, but built in the plane's local frame and placed via
+    # transform_shape instead of assuming a world axis.
+    padding = max(bounds.size.x, bounds.size.y, bounds.size.z, 1.0) + 10.0
+    half_gap = max(0.0, gap) / 2.0
+    size_xy = 2.0 * padding
+    piece_knife = _local_box(size_xy, size_xy, -padding, -half_gap)
+    remainder_knife = _local_box(size_xy, size_xy, -padding, half_gap)
+    return transform_shape(piece_knife, transform), transform_shape(remainder_knife, transform)
+
+
+def _object_knife(slice_spec: SliceSpec, repository: GeometryRepository, project: Project) -> cq.Shape:
+    scene_object = project.object_by_id(slice_spec.object_id)
+    resolved = repository.resolve(scene_object)
     if resolved.brep is None:
         raise GenerationError(
             f"Slice '{slice_spec.name}' references an object with no BRep "
@@ -133,19 +158,19 @@ def slice_result(
     slicing: SlicingSpec,
     repository: GeometryRepository,
     project: Project,
+    tolerance: float,
     messages: list[GenerationMessage],
 ) -> dict[str, cq.Shape]:
     bodies: dict[str, cq.Shape] = {}
     remainder = result
     bounds = bounds_from_shape(result)
     for slice_spec in slicing.slices:
-        knife = (
-            _plane_knife(slice_spec.transform, bounds)
-            if slice_spec.cutter_kind is SliceCutterKind.PLANE
-            else _object_knife(slice_spec, repository, project)
-        )
-        piece = _boolean_step("intersect", remainder, knife, ..., tolerance, messages)
-        remainder = _boolean_step("cut", remainder, knife, ..., tolerance, messages)
+        if slice_spec.cutter_kind is SliceCutterKind.PLANE:
+            piece_knife, remainder_knife = _plane_knives(slice_spec.transform, slice_spec.gap, bounds)
+        else:
+            piece_knife = remainder_knife = _object_knife(slice_spec, repository, project)
+        piece = _boolean_step("intersect", remainder, piece_knife, slice_spec, tolerance, messages)
+        remainder = _boolean_step("cut", remainder, remainder_knife, slice_spec, tolerance, messages)
         if piece.isNull() or piece.Volume() <= tolerance:
             raise GenerationError(f"Slice '{slice_spec.name}' produced an empty body")
         bodies[slice_spec.name] = piece.clean()
@@ -155,10 +180,20 @@ def slice_result(
     return bodies
 ```
 
-`_boolean_step` is reused as-is (it already accepts an arbitrary op name
-via `getattr(result, op)`, so `"intersect"` works alongside the existing
-`"fuse"`/`"cut"` calls) for the same retry-with-`.clean()` behavior and
-per-object error attribution.
+For a plane cutter with zero rotation and translation `(0, 0, offset)`,
+this is exactly today's `split_shape` math (`low_plane = offset - gap/2`,
+`high_plane = offset + gap/2`), just built in a local frame first —
+existing golden volumes for the Z-axis split case are expected to carry
+over unchanged. `_boolean_step`'s signature takes a `SceneObject` for
+error attribution; `_boolean_step` itself is reused unmodified (it
+already dispatches via `getattr(result, op)`, so `"intersect"` works
+alongside the existing `"fuse"`/`"cut"` calls) — `slice_spec` is passed
+positionally where it currently expects a `SceneObject`, so
+`_boolean_step`'s parameter is renamed from `scene_object` to `owner: SceneObject | SliceSpec`
+and its error-message formatting is generalized from
+`f"({scene_object.role.value})"` to a small `_owner_label(owner)` helper
+returning `f"({owner.role.value})"` for a `SceneObject` or
+`"(slice)"` for a `SliceSpec`, since a `SliceSpec` has no `role`.
 
 `GenerationResult.split_a`/`split_b` are removed; add
 `sliced_bodies: dict[str, cq.Shape] = field(default_factory=dict)`
@@ -172,9 +207,12 @@ block, with the same try/except-to-`GenerationMessage` wrapping.
 Replace `configure_split` with:
 
 - `configure_slicing(project, *, enabled=None, remainder_name=None) -> None`
-- `add_slice(project, *, name, cutter_kind, transform=None, object_id=None, index=None) -> SliceSpec` —
+- `add_slice(project, *, name, cutter_kind, transform=None, gap=0.0, object_id=None, index=None) -> SliceSpec` —
   validates per the invariants above, raises `CommandError` otherwise;
-  inserts at `index` (default: append).
+  inserts at `index` (default: append). `gap` must be `>= 0`
+  (`CommandError` otherwise, matching today's `configure_split` gap
+  check) and must be `0` when `cutter_kind is SliceCutterKind.OBJECT`
+  (`CommandError`: "Gap only applies to plane cutters").
 - `remove_slice(project, name_or_index) -> None`
 - `reorder_slice(project, name_or_index, new_index) -> None`
 - `list_slices(project) -> list[SliceSpec]` (thin, for CLI `list`/`--json`)
@@ -189,7 +227,7 @@ same style as existing single-purpose commands — no new argparse pattern
 needed beyond nested subparsers, which argparse supports natively):
 
 ```
-flipfill slice <project> add --name "Front Bezel" --plane --at-z 8 [--rx --ry --rz --x --y]
+flipfill slice <project> add --name "Front Bezel" --plane --at-z 8 --gap 0.3 [--rx --ry --rz --x --y]
 flipfill slice <project> add --name "Battery Pocket" --object Battery
 flipfill slice <project> remove "Front Bezel"
 flipfill slice <project> move "Front Bezel" --to 0
@@ -246,9 +284,14 @@ slice-list editor, reusing existing widgets/patterns only:
   resulting pieces are valid and their volumes sum to the pre-cut volume.
 - Multi-slice chain: 3+ ordered cuts → N+1 valid, nonzero-volume bodies
   whose volumes sum to the whole (within `boolean_tolerance`).
+- A plane cutter with a nonzero `gap`: verify the kerf slab volume is
+  excluded from both resulting pieces (piece + remainder volumes sum to
+  less than the pre-cut volume by approximately `gap * cross_section_area`).
 - Error paths: a plane entirely outside the shape's bounds (empty piece),
   an object cutter referencing a mesh-only object, an object cutter
-  referencing a nonexistent id, duplicate slice names.
+  referencing a nonexistent id, duplicate slice names, a nonzero `gap`
+  on an object cutter (rejected in `commands.add_slice`, not here, but
+  worth one generator-level test for defense in depth).
 
 ### CLI — `tests/test_cli.py`
 
