@@ -16,7 +16,8 @@ from flipfill.model import (
     PrimitiveSpec,
     Project,
     SceneObject,
-    SplitAxis,
+    SliceCutterKind,
+    SliceSpec,
     Transform,
     Vector3,
 )
@@ -131,10 +132,16 @@ def build_project() -> Project:
 
     repository = GeometryRepository()
     fit_envelope_to_objects(project, repository)
-    project.split.enabled = True
-    project.split.axis = SplitAxis.Z
-    project.split.offset = 1.5
-    project.split.gap = 0.35
+    project.slicing.enabled = True
+    project.slicing.slices.append(
+        SliceSpec(
+            name="Bottom Shell",
+            cutter_kind=SliceCutterKind.PLANE,
+            transform=Transform(translation=Vector3(0, 0, 1.5)),
+            gap=0.35,
+        )
+    )
+    project.slicing.remainder_name = "Top Shell"
     return project
 
 
@@ -149,9 +156,9 @@ def main() -> None:
     export_fitcheck_assembly(
         project, result, ROOT / "portable_monitor_demo_fitcheck.step"
     )
-    if result.split_a is not None and result.split_b is not None:
-        export_shape(result.split_a, ROOT / "portable_monitor_demo_A.step")
-        export_shape(result.split_b, ROOT / "portable_monitor_demo_B.step")
+    for name, shape in result.sliced_bodies.items():
+        slug = "".join(c.lower() if c.isalnum() else "_" for c in name).strip("_")
+        export_shape(shape, ROOT / f"portable_monitor_demo_{slug}.step")
 
     print(project_path)
     print(f"Generated volume: {result.result.Volume():.3f} mm^3")
