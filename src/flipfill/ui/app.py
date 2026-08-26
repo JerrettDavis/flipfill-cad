@@ -1316,7 +1316,7 @@ class FlipFillApp:
         self.status.set(f"Exported package to {output}")
         messagebox.showinfo(
             "Package exported",
-            f"Generated body, STL, fit-check assembly, project, split halves (when enabled), "
+            f"Generated body, STL, fit-check assembly, project, sliced bodies (when enabled), "
             f"and preview were written to:\n\n{output}",
             parent=self.root,
         )
@@ -1553,7 +1553,7 @@ class FlipFillApp:
             "volumes to Cutout, bosses/ribs to Additive, and visual-only geometry to Reference.\n\n"
             "3. Fit or manually size the rounded envelope around the stack.\n\n"
             "4. Generate. FlipFill computes (envelope + additives) - cavities - cutouts, "
-            "validates cavity intersections, and optionally splits the body.\n\n"
+            "validates cavity intersections, and optionally slices the body into named pieces.\n\n"
             "5. Export the generated STEP and the fit-check STEP assembly. Inspect the assembly "
             "in Fusion 360 before printing.",
             parent=self.root,

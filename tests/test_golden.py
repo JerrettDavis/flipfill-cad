@@ -21,8 +21,8 @@ from flipfill.project_io import load_project
 EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "portable_monitor_demo.flipfill.json"
 
 EXPECTED_VOLUME_MM3 = 64338.905
-EXPECTED_SLICE_BOTTOM_SHELL_MM3 = 14046.024  # placeholder -- replace with the value from the first failing run
-EXPECTED_SLICE_TOP_SHELL_MM3 = 49938.679  # placeholder -- replace with the value from the first failing run
+EXPECTED_SLICE_BOTTOM_SHELL_MM3 = 14046.024
+EXPECTED_SLICE_TOP_SHELL_MM3 = 49938.679
 
 
 @pytest.fixture(scope="module")

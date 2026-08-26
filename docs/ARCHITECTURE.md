@@ -15,7 +15,7 @@ layer, and two thin front ends (CLI, desktop UI) that both drive it.
 ┌──────────────────────────▼───────────────────────────────┐
 │ flipfill.commands (application service layer)             │
 │ create/open project, import, find/move/rotate/align,      │
-│ role/clearance, blocker primitives, envelope, slicing,      │
+│ role/clearance, blocker primitives, envelope, slicing,    │
 │ doctor -- no console I/O, no sys.exit, unit-testable        │
 └──────────────────────────┬───────────────────────────────┘
                            │ CadQuery shapes / meshes
