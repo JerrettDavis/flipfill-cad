@@ -15,3 +15,4 @@ Thumbs.db
 /out/
 *.spec
 coverage.xml
+.worktrees/
