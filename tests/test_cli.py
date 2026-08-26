@@ -218,32 +218,146 @@ def test_blocker_and_envelope_fit(tmp_path: Path) -> None:
     assert project.envelope.size.x > 10.0
 
 
-def test_split_configure(tmp_path: Path) -> None:
+def test_slice_add_plane_and_list(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    project_path = tmp_path / "demo.flipfill.json"
+    main(["new", str(project_path)])
+    capsys.readouterr()
+
+    code = main(
+        [
+            "slice",
+            str(project_path),
+            "add",
+            "--name",
+            "Front Bezel",
+            "--plane",
+            "--at-z",
+            "8",
+            "--gap",
+            "0.3",
+        ]
+    )
+    assert code == 0
+    capsys.readouterr()
+
+    assert main(["slice", str(project_path), "list", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert len(payload["slices"]) == 1
+    assert payload["slices"][0]["name"] == "Front Bezel"
+    assert payload["slices"][0]["cutter_kind"] == "plane"
+    assert payload["slices"][0]["gap"] == pytest.approx(0.3)
+
+    project = load_project(project_path)
+    assert project.slicing.slices[0].transform.translation.z == pytest.approx(8.0)
+
+
+def test_slice_add_object_cutter(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    project_path = tmp_path / "demo.flipfill.json"
+    main(["new", str(project_path)])
+    main(
+        [
+            "blocker",
+            str(project_path),
+            "--role",
+            "additive",
+            "--kind",
+            "box",
+            "--name",
+            "Knife",
+            "--size",
+            "40",
+            "40",
+            "40",
+        ]
+    )
+    capsys.readouterr()
+
+    code = main(
+        ["slice", str(project_path), "add", "--name", "Battery Pocket", "--object", "Knife"]
+    )
+    assert code == 0
+
+    project = load_project(project_path)
+    assert project.slicing.slices[0].cutter_kind.value == "object"
+    knife = project.object_by_id(project.slicing.slices[0].object_id)
+    assert knife is not None and knife.name == "Knife"
+
+
+def test_slice_remove_move_and_toggle(tmp_path: Path) -> None:
+    project_path = tmp_path / "demo.flipfill.json"
+    main(["new", str(project_path)])
+    main(["slice", str(project_path), "add", "--name", "A", "--plane", "--at-z", "1"])
+    main(["slice", str(project_path), "add", "--name", "B", "--plane", "--at-z", "2"])
+
+    assert main(["slice", str(project_path), "move", "B", "--to", "0"]) == 0
+    project = load_project(project_path)
+    assert [s.name for s in project.slicing.slices] == ["B", "A"]
+
+    assert main(["slice", str(project_path), "remove", "A"]) == 0
+    project = load_project(project_path)
+    assert [s.name for s in project.slicing.slices] == ["B"]
+
+    assert main(["slice", str(project_path), "enable"]) == 0
+    assert load_project(project_path).slicing.enabled is True
+    assert main(["slice", str(project_path), "disable"]) == 0
+    assert load_project(project_path).slicing.enabled is False
+
+    assert main(["slice", str(project_path), "remainder-name", "Rear Shell"]) == 0
+    assert load_project(project_path).slicing.remainder_name == "Rear Shell"
+
+
+def test_slice_add_rejects_duplicate_name(tmp_path: Path) -> None:
+    project_path = tmp_path / "demo.flipfill.json"
+    main(["new", str(project_path)])
+    assert main(["slice", str(project_path), "add", "--name", "A", "--plane"]) == 0
+
+    code = main(["slice", str(project_path), "add", "--name", "A", "--plane"])
+
+    assert code != 0
+
+
+def test_slice_add_object_cutter_rejects_gap(tmp_path: Path) -> None:
+    project_path = tmp_path / "demo.flipfill.json"
+    main(["new", str(project_path)])
+    main(
+        [
+            "blocker",
+            str(project_path),
+            "--role",
+            "additive",
+            "--kind",
+            "box",
+            "--name",
+            "Knife",
+            "--size",
+            "10",
+            "10",
+            "10",
+        ]
+    )
+
+    code = main(
+        [
+            "slice",
+            str(project_path),
+            "add",
+            "--name",
+            "A",
+            "--object",
+            "Knife",
+            "--gap",
+            "0.5",
+        ]
+    )
+
+    assert code != 0
+
+
+def test_slice_remove_unknown_fails(tmp_path: Path) -> None:
     project_path = tmp_path / "demo.flipfill.json"
     main(["new", str(project_path)])
 
-    assert (
-        main(
-            [
-                "split",
-                str(project_path),
-                "--enable",
-                "--axis",
-                "z",
-                "--offset",
-                "1.5",
-                "--gap",
-                "0.3",
-            ]
-        )
-        == 0
-    )
-
-    project = load_project(project_path)
-    assert project.split.enabled is True
-    assert project.split.axis.value == "z"
-    assert project.split.offset == pytest.approx(1.5)
-    assert project.split.gap == pytest.approx(0.3)
+    assert main(["slice", str(project_path), "remove", "Nope"]) != 0
 
 
 def test_generate_validate_and_export(tmp_path: Path) -> None:
