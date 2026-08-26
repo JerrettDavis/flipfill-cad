@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import cadquery as cq
 import pytest
 
@@ -12,7 +14,8 @@ from flipfill.model import (
     PrimitiveSpec,
     Project,
     SceneObject,
-    SplitAxis,
+    SliceCutterKind,
+    SliceSpec,
     Transform,
     Vector3,
 )
@@ -193,24 +196,116 @@ def test_fit_envelope_applies_margin() -> None:
     assert project.envelope.transform.rotation_deg == Vector3()
 
 
-def test_split_produces_two_valid_halves() -> None:
+def test_plane_slice_reproduces_axis_split_with_gap() -> None:
     project = Project()
     project.envelope.kind = PrimitiveKind.BOX
     project.envelope.size = Vector3(20, 20, 20)
-    project.split.enabled = True
-    project.split.axis = SplitAxis.Z
-    project.split.offset = 0
-    project.split.gap = 0.4
+    project.slicing.enabled = True
+    project.slicing.remainder_name = "Top"
+    project.slicing.slices.append(
+        SliceSpec(name="Bottom", cutter_kind=SliceCutterKind.PLANE, gap=0.4)
+    )
 
     result = generate(project)
 
-    assert result.split_a is not None
-    assert result.split_b is not None
-    assert result.split_a.isValid()
-    assert result.split_b.isValid()
-    assert result.split_a.Volume() + result.split_b.Volume() == pytest.approx(
+    assert set(result.sliced_bodies) == {"Bottom", "Top"}
+    bottom = result.sliced_bodies["Bottom"]
+    top = result.sliced_bodies["Top"]
+    assert bottom.isValid() and top.isValid()
+    assert bottom.Volume() + top.Volume() == pytest.approx(
         20 * 20 * 19.6, abs=1.0e-5
     )
+
+
+def test_multi_slice_chain_partitions_whole_volume() -> None:
+    project = Project()
+    project.envelope.kind = PrimitiveKind.BOX
+    project.envelope.size = Vector3(30, 30, 30)
+    project.slicing.enabled = True
+    project.slicing.slices.extend(
+        [
+            SliceSpec(
+                name="Front Bezel",
+                cutter_kind=SliceCutterKind.PLANE,
+                transform=Transform(Vector3(0, 0, -5)),
+            ),
+            SliceSpec(
+                name="Center Support",
+                cutter_kind=SliceCutterKind.PLANE,
+                transform=Transform(Vector3(0, 0, 5)),
+            ),
+        ]
+    )
+
+    result = generate(project)
+
+    assert set(result.sliced_bodies) == {"Front Bezel", "Center Support", "Remainder"}
+    for shape in result.sliced_bodies.values():
+        assert shape.isValid()
+        assert shape.Volume() > 0
+    assert sum(shape.Volume() for shape in result.sliced_bodies.values()) == pytest.approx(
+        30 * 30 * 30, rel=1.0e-6
+    )
+
+
+def test_object_cutter_slices_using_scene_object_solid() -> None:
+    project = Project()
+    project.envelope.kind = PrimitiveKind.BOX
+    project.envelope.size = Vector3(20, 20, 20)
+    knife = SceneObject(
+        name="Knife",
+        role=ObjectRole.REFERENCE,
+        primitive=PrimitiveSpec(PrimitiveKind.BOX, Vector3(40, 40, 40)),
+        transform=Transform(Vector3(0, 0, -20)),
+    )
+    project.objects.append(knife)
+    project.slicing.enabled = True
+    project.slicing.slices.append(
+        SliceSpec(name="Bottom Half", cutter_kind=SliceCutterKind.OBJECT, object_id=knife.id)
+    )
+
+    result = generate(project)
+
+    assert set(result.sliced_bodies) == {"Bottom Half", "Remainder"}
+    bottom = result.sliced_bodies["Bottom Half"]
+    remainder = result.sliced_bodies["Remainder"]
+    assert bottom.isValid() and remainder.isValid()
+    assert bottom.Volume() == pytest.approx(20 * 20 * 10, rel=1.0e-3)
+    assert remainder.Volume() == pytest.approx(20 * 20 * 10, rel=1.0e-3)
+
+
+def test_slice_with_missing_object_id_raises() -> None:
+    project = Project()
+    project.envelope.kind = PrimitiveKind.BOX
+    project.envelope.size = Vector3(20, 20, 20)
+    project.slicing.enabled = True
+    project.slicing.slices.append(
+        SliceSpec(name="Bad", cutter_kind=SliceCutterKind.OBJECT, object_id="does-not-exist")
+    )
+
+    with pytest.raises(GenerationError):
+        generate(project)
+
+
+def test_slice_referencing_mesh_only_object_raises(tmp_path: Path) -> None:
+    import cadquery as cq
+    from cadquery import exporters
+
+    mesh_path = tmp_path / "knife.stl"
+    exporters.export(cq.Workplane("XY").box(40, 40, 40), str(mesh_path))
+
+    project = Project()
+    project.envelope.kind = PrimitiveKind.BOX
+    project.envelope.size = Vector3(20, 20, 20)
+    knife = SceneObject(name="Mesh Knife", role=ObjectRole.REFERENCE, source_path=str(mesh_path))
+    project.objects.append(knife)
+    project.slicing.enabled = True
+    project.slicing.slices.append(
+        SliceSpec(name="Bad", cutter_kind=SliceCutterKind.OBJECT, object_id=knife.id)
+    )
+
+    with pytest.raises(GenerationError):
+        generate(project)
 
 
 def test_obb_clearance_is_tighter_than_aabb_for_a_rotated_occupant() -> None:
