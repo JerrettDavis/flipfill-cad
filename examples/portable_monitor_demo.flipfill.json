@@ -19,7 +19,7 @@
           0.0
         ]
       },
-      "source_path": "assets\\demo_display_module.step",
+      "source_path": "assets/demo_display_module.step",
       "primitive": null,
       "visible": true,
       "included_in_envelope_fit": true,
@@ -44,7 +44,7 @@
           0.0
         ]
       },
-      "source_path": "assets\\demo_battery.step",
+      "source_path": "assets/demo_battery.step",
       "primitive": null,
       "visible": true,
       "included_in_envelope_fit": true,
@@ -69,7 +69,7 @@
           0.0
         ]
       },
-      "source_path": "assets\\demo_speaker.step",
+      "source_path": "assets/demo_speaker.step",
       "primitive": null,
       "visible": true,
       "included_in_envelope_fit": true,
