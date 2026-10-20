@@ -23,7 +23,7 @@ classifiers = [
 dependencies = [
   "cadquery==2.8.0",
   "numpy>=1.26,<3",
-  "Pillow>=11,<13",
+  "Pillow>=11,<14",
   "trimesh>=4.11.4,<6",
 ]
 
